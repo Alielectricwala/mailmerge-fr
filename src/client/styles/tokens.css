@@ -1,0 +1,39 @@
+/* FocusRealm Mail Merge — design tokens (single source of truth; Tailwind reads these).
+   Values are RGB channels so Tailwind can apply opacity: rgb(var(--brand) / 0.1). */
+
+:root {
+  /* Surfaces */
+  --canvas: 244 247 252; /* #F4F7FC pale blue-grey workspace */
+  --surface: 255 255 255; /* cards, panels */
+  --surface-muted: 248 250 253; /* table headers, quiet panels */
+  --surface-sunken: 236 241 248; /* inputs on muted, code */
+
+  /* Lines */
+  --line: 223 229 239; /* #DFE5EF default borders */
+  --line-strong: 199 209 224;
+
+  /* Text */
+  --ink: 16 24 40; /* #101828 navy body text */
+  --ink-muted: 71 84 103; /* #475467 secondary */
+  --ink-subtle: 102 112 133; /* #667085 meta, captions */
+  --ink-faint: 152 162 179; /* #98A2B3 placeholders, disabled */
+  --navy: 13 27 62; /* #0D1B3E brand navy (wordmark, dark brand panels) */
+
+  /* Brand — FocusRealm blue */
+  --brand: 33 104 232; /* #2168E8 */
+  --brand-hover: 25 88 204; /* #1958CC */
+  --brand-soft: 235 242 254; /* #EBF2FE selected, info backgrounds */
+  --brand-ink: 21 72 168; /* #1548A8 text on brand-soft */
+
+  /* Semantic */
+  --success: 15 124 82; /* #0F7C52 */
+  --success-soft: 231 246 239;
+  --warning: 176 98 6; /* #B06206 */
+  --warning-soft: 253 243 225;
+  --danger: 196 40 40; /* #C42828 */
+  --danger-hover: 168 30 30;
+  --danger-soft: 253 236 236;
+
+  /* Type */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}

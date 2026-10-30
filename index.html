@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FocusRealm Mail Merge</title>
+    <meta name="description" content="FocusRealm Mail Merge — personalised outreach from your own mailbox, with approval before anything sends." />
+    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      /* Splash shown until the app's first render replaces #root. Kept inline so it appears before any JS or CSS. */
+      .fr-splash{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#F4F7FC;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;animation:fr-in .3s ease-out .15s both}
+      .fr-splash p{margin:0}
+      .fr-splash .t{margin-top:22px;font-size:18px;font-weight:600;letter-spacing:-.01em;color:#0D1B3E}
+      .fr-splash .s{margin-top:2px;font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#667085}
+      .fr-splash .bar{position:relative;width:208px;height:4px;margin-top:24px;border-radius:9px;background:#DFE5EF;overflow:hidden}
+      .fr-splash .bar i{position:absolute;inset:0 auto 0 0;width:40%;border-radius:9px;background:linear-gradient(90deg,transparent,#2168E8,#0D1B3E,transparent);animation:fr-bar 1.4s cubic-bezier(.4,0,.2,1) infinite}
+      .fr-splash .fx{transform-origin:24px 24px;animation:fr-focus 2.4s cubic-bezier(.4,0,.2,1) infinite}
+      @keyframes fr-in{from{opacity:0}to{opacity:1}}
+      @keyframes fr-bar{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+      @keyframes fr-focus{0%,100%{transform:scale(1.12);opacity:.45}45%,70%{transform:scale(1);opacity:1}}
+      @media (prefers-reduced-motion:reduce){.fr-splash,.fr-splash *{animation:none!important}}
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="fr-splash" role="status" aria-live="polite">
+        <svg width="64" height="64" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="47" height="47" rx="12" fill="#fff" stroke="#DFE5EF" />
+          <g class="fx" stroke="#2168E8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 16.5V12a3 3 0 0 1 3-3h4.5" /><path d="M31.5 9H36a3 3 0 0 1 3 3v4.5" /><path d="M39 31.5V36a3 3 0 0 1-3 3h-4.5" /><path d="M16.5 39H12a3 3 0 0 1-3-3v-4.5" />
+          </g>
+          <g stroke="#0D1B3E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="14.5" y="16.5" width="19" height="15" rx="3" fill="#EBF2FE" /><path d="M16.5 18.5 24 24.25 31.5 18.5" stroke="#2168E8" /></g>
+        </svg>
+        <p class="t">FocusRealm</p>
+        <p class="s">Mail Merge</p>
+        <div class="bar"><i></i></div>
+        <noscript><p style="margin-top:16px;font-size:13px;color:#475467">FocusRealm Mail Merge needs JavaScript turned on.</p></noscript>
+      </div>
+    </div>
+    <script type="module" src="/src/client/main.tsx"></script>
+  </body>
+</html>

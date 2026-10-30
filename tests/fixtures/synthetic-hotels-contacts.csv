@@ -1,0 +1,14 @@
+First Name,Last Name,Email,Company,Job Title,Phone,Hotel Segment,Contact Persona,City
+Aaditya,Mehta,aaditya.mehta@oberoihotels.test,The Oberoi Grand Palace,General Manager,+91 33 2249 2323,LUXURY,GENERAL_MANAGER,Kolkata
+Rohan,Verma,rohan.verma@postcardhotels.test,The Postcard Cavelossim Boutique Hotel,Managing Director & Owner,+91 832 277 1234,BOUTIQUE,OWNER_OPERATOR,Goa
+Priya,Sharma,priya.sharma@radissonblu.test,Radisson Blu Hotel & Suites,Director of Operations,+91 11 4600 0100,UPSCALE,OPERATIONS_DIRECTOR,New Delhi
+Vikram,Deshmukh,vikram.d@midtowninn.test,Midtown Express Inn,Operations Manager,+91 22 2847 9000,MIDSCALE,OPERATIONS_DIRECTOR,Mumbai
+Kavita,Nair,kavita.nair@kumarakomresort.test,Kumarakom Lake Golf & Spa Resort,Director of Revenue Management,+91 481 252 4974,RESORT,REVENUE_MANAGER,Kumarakom
+Devendra,Singh,devendra@rajasthanheritage.test,Heritage Haveli Heritage Hotel,Proprietor & Operator,+91 294 243 1111,INDEPENDENT,OWNER_OPERATOR,Udaipur
+Ananya,Iyer,ananya.iyer@apexholdings.test,Apex Corporate Ventures,Executive Consultant,+91 80 4123 4567,UNKNOWN,OTHER,Bengaluru
+,,ops.team@coastalretreat.test,Coastal Bay Boutique Suites,Front Office Manager,+91 832 999 1122,,OPERATIONS_DIRECTOR,Goa
+Siddharth,Kapoor,invalid-email-row,Imperial Luxury Towers,General Manager,+91 22 1111 2222,LUXURY,GENERAL_MANAGER,Mumbai
+Aaditya,Mehta,aaditya.mehta@oberoihotels.test,The Oberoi Grand Palace Duplicate,General Manager,+91 33 2249 2323,LUXURY,GENERAL_MANAGER,Kolkata
+Manish,Bhatia,manish.bhatia@unclassifiedcorp.test,Mystic Horizon Co,Chief Strategist,+91 11 9988 7766,,,,Delhi
+Frank,Test,s265.frank@gmail.com,The Grand Focus Boutique Hotel,General Manager,+91 98200 12345,LUXURY,GENERAL_MANAGER,Mumbai
+Aves,Test,aves7203@gmail.com,Northstar Resort & Spa,Director of Operations,+91 98200 67890,RESORT,OPERATIONS_DIRECTOR,Goa

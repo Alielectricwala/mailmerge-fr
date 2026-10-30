@@ -1,0 +1,568 @@
+// FocusRealm Mail Merge — Prisma Schema (PostgreSQL)
+// Apply changes with: npx prisma migrate dev --name <change>
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  // App queries. On Vercel use the provider's *pooled* URL (Neon/Supabase: add ?pgbouncer=true)
+  url       = env("DATABASE_URL")
+  // Migrations need a direct (non-pooled) connection. Locally it's the same as DATABASE_URL.
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum CampaignStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENDING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignAutomationMode {
+  MANUAL
+  APPROVAL_REQUIRED
+  AUTOMATIC
+}
+
+enum RecipientSequenceState {
+  PENDING_INITIAL
+  INITIAL_SENT
+  FOLLOW_UP_SCHEDULED
+  AWAITING_APPROVAL
+  FOLLOW_UP_SENT
+  REPLY_RECEIVED
+  BOUNCED
+  SUPPRESSED
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+// Delivery state of one message. Engagement (bounce/reply/unsubscribe) is tracked separately.
+enum DeliveryStatus {
+  PENDING // frozen at approval, waiting for the worker
+  CLAIMED // a worker is handing it to SMTP right now
+  SENT // SMTP accepted it
+  FAILED // SMTP rejected it (see lastError); can be retried
+  UNKNOWN // interrupted mid-handoff; never retried automatically
+  SKIPPED // not sent: suppressed, missing data, duplicate (see skipReason)
+  CANCELLED // campaign cancelled before it was sent
+}
+
+enum SendEventType {
+  HARD_BOUNCE
+  SOFT_BOUNCE
+  REPLY
+  UNSUBSCRIBE
+}
+
+enum SuppressionReason {
+  HARD_BOUNCE
+  SOFT_BOUNCE
+  SPAM_COMPLAINT
+  UNSUBSCRIBE
+  MANUAL
+  INVALID_EMAIL
+  DOMAIN_SUPPRESSION
+}
+
+enum EnrichmentStatus {
+  GUESSED // proposed, not checked by a person
+  VERIFIED // a person confirmed it against the evidence
+  MANUAL // entered by a person from a source they checked
+  REJECTED
+}
+
+// Keep in sync with src/shared/auth.ts (UserRoleSchema / UserStatusSchema)
+enum UserRole {
+  FOUNDER
+  EMPLOYEE
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum AuthTokenPurpose {
+  INVITE
+  PASSWORD_RESET
+}
+
+// ============================================================================
+// CONTACTS
+// ============================================================================
+
+model Contact {
+  id           String   @id @default(cuid())
+  email        String   @unique @db.Citext
+  firstName    String?
+  lastName     String?
+  company      String?
+  title        String?
+  phone        String?
+  // Extra columns from imports, keyed by merge-field name
+  customFields Json     @default("{}")
+  source       String? // "csv-import", "manual"
+  importedAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  // Segmentation and persona
+  hotelSegment             String?
+  hotelSegmentConfidence   Float?
+  hotelSegmentStatus       EnrichmentStatus?
+  contactPersona           String?
+  contactPersonaConfidence Float?
+  contactPersonaStatus     EnrichmentStatus?
+
+  memberships       ListMembership[]
+  enrichments       Enrichment[]
+  sends             Send[]
+  campaignOverrides CampaignRecipientOverride[]
+  recipientStates   CampaignRecipientState[]
+
+  @@index([company])
+  @@index([hotelSegment])
+  @@index([contactPersona])
+  @@map("contacts")
+}
+
+model ContactList {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  members   ListMembership[]
+  campaigns Campaign[]
+  imports   ImportBatch[]
+
+  @@map("contact_lists")
+}
+
+model ListMembership {
+  id            String      @id @default(cuid())
+  contactId     String
+  contact       Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contactListId String
+  contactList   ContactList @relation(fields: [contactListId], references: [id], onDelete: Cascade)
+  addedAt       DateTime    @default(now()) @db.Timestamptz
+
+  @@unique([contactId, contactListId])
+  @@index([contactListId])
+  @@map("campaign_members")
+}
+
+model ImportBatch {
+  id              String       @id @default(cuid())
+  fileName        String
+  contactListId   String?
+  contactList     ContactList? @relation(fields: [contactListId], references: [id], onDelete: SetNull)
+  createdById     String?
+  createdBy       User?        @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  duplicatePolicy String
+  totalRows       Int
+  created         Int
+  updated         Int
+  unchanged       Int
+  skipped         Int
+  // [{ row, message }] — capped
+  errors          Json         @default("[]")
+  createdAt       DateTime     @default(now()) @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("import_batches")
+}
+
+// ============================================================================
+// TEMPLATES & CAMPAIGNS
+// ============================================================================
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  subject     String
+  bodyHtml    String
+  bodyText    String?
+  description String?
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  campaigns         Campaign[]
+  campaignTemplates CampaignTemplate[]
+  campaignRules     CampaignRule[]
+  campaignOverrides CampaignRecipientOverride[]
+  sequenceSteps     CampaignSequenceStep[]
+  sends             Send[]
+
+  @@map("templates")
+}
+
+model Campaign {
+  id                String         @id @default(cuid())
+  name              String         @unique
+  description       String?
+  status            CampaignStatus @default(DRAFT)
+  templateId        String
+  template          Template       @relation(fields: [templateId], references: [id])
+  contactListId     String
+  contactList       ContactList    @relation(fields: [contactListId], references: [id])
+  // Sender: per-campaign identity; defaults to user's sender address or mailbox
+  fromName          String
+  fromEmail         String?
+  replyTo           String?
+  sendRatePerMinute Int            @default(20)
+  automationMode    CampaignAutomationMode @default(APPROVAL_REQUIRED)
+
+  // Frozen at approval — what recipients actually receive, regardless of later template edits
+  subject     String?
+  bodyHtml    String?
+  bodyText    String?
+  contentHash String?
+
+  createdById           String?
+  createdBy             User?     @relation("CampaignCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  approvalRequestedById String?
+  approvalRequestedBy   User?     @relation("CampaignApprovalRequestedBy", fields: [approvalRequestedById], references: [id], onDelete: Restrict)
+  approvalRequestedAt   DateTime? @db.Timestamptz
+  approvedById          String?
+  approvedByUser        User?     @relation("CampaignApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict)
+  approvedAt            DateTime? @db.Timestamptz
+  // Why sending stopped on its own (e.g. mailbox sign-in failed, daily limit)
+  pausedReason          String?
+  startedAt             DateTime? @db.Timestamptz
+  completedAt           DateTime? @db.Timestamptz
+  cancelledAt           DateTime? @db.Timestamptz
+  createdAt             DateTime  @default(now()) @db.Timestamptz
+  updatedAt             DateTime  @updatedAt @db.Timestamptz
+
+  campaignTemplates  CampaignTemplate[]
+  rules              CampaignRule[]
+  recipientOverrides CampaignRecipientOverride[]
+  sequenceSteps      CampaignSequenceStep[]
+  recipientStates    CampaignRecipientState[]
+  sends              Send[]
+
+  @@index([status])
+  @@index([contactListId])
+  @@map("campaigns")
+}
+
+// One message to one recipient, created (and rendered) when the campaign is approved
+model Send {
+  id               String         @id @default(cuid())
+  campaignId       String
+  campaign         Campaign       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId        String?
+  contact          Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  email            String         @db.Citext
+  subject          String
+  html             String
+  text             String
+  status           DeliveryStatus @default(PENDING)
+  skipReason       String?
+  // Generated before handoff so bounces/replies can be matched and nothing is sent twice
+  messageId        String         @unique
+  attempts         Int            @default(0)
+  lastError        String?
+  claimedAt        DateTime?      @db.Timestamptz
+  sentAt           DateTime?      @db.Timestamptz
+  bouncedAt        DateTime?      @db.Timestamptz
+  repliedAt        DateTime?      @db.Timestamptz
+  unsubscribedAt   DateTime?      @db.Timestamptz
+  templateId       String?
+  template         Template?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateVersion  Int?
+  assignmentReason String?
+  stepIndex        Int            @default(0)
+  scheduledFor     DateTime?      @db.Timestamptz
+  approvedAt       DateTime?      @db.Timestamptz
+  inReplyToId      String?
+  isCustom         Boolean        @default(false)
+  createdAt        DateTime       @default(now()) @db.Timestamptz
+  updatedAt        DateTime       @updatedAt @db.Timestamptz
+
+  events SendEvent[]
+
+  @@unique([campaignId, email, stepIndex])
+  @@index([campaignId, status])
+  @@index([campaignId, stepIndex, status])
+  @@index([status, scheduledFor])
+  @@index([status, sentAt])
+  @@index([contactId])
+  @@map("sends")
+}
+
+model SendEvent {
+  id         String        @id @default(cuid())
+  sendId     String
+  send       Send          @relation(fields: [sendId], references: [id], onDelete: Cascade)
+  type       SendEventType
+  occurredAt DateTime      @db.Timestamptz
+  // e.g. { diagnostic, from, subject, snippet }
+  detail     Json          @default("{}")
+  createdAt  DateTime      @default(now()) @db.Timestamptz
+
+  @@index([sendId])
+  @@map("send_events")
+}
+
+model CampaignTemplate {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  templateId String
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  isFallback Boolean  @default(false)
+  priority   Int      @default(0)
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  updatedAt  DateTime @updatedAt @db.Timestamptz
+
+  @@unique([campaignId, templateId])
+  @@index([campaignId])
+  @@map("campaign_templates")
+}
+
+model CampaignRule {
+  id               String   @id @default(cuid())
+  campaignId       String
+  campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  templateId       String
+  template         Template @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  priority         Int      @default(0)
+  hotelSegment     String?
+  contactPersona   String?
+  requiresVerified Boolean  @default(false)
+  minConfidence    Float?
+  city             String?
+  description      String?
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  updatedAt        DateTime @updatedAt @db.Timestamptz
+
+  @@index([campaignId, priority])
+  @@map("campaign_rules")
+}
+
+model CampaignRecipientOverride {
+  id             String   @id @default(cuid())
+  campaignId     String
+  campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId      String
+  contact        Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  templateId     String
+  template       Template @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  reason         String?
+  customSubject  String?
+  customBodyHtml String?
+  customBodyText String?
+  isCustom       Boolean  @default(false)
+  createdAt      DateTime @default(now()) @db.Timestamptz
+  updatedAt      DateTime @updatedAt @db.Timestamptz
+
+  @@unique([campaignId, contactId])
+  @@index([campaignId])
+  @@map("campaign_recipient_overrides")
+}
+
+model CampaignSequenceStep {
+  id                    String   @id @default(cuid())
+  campaignId            String
+  campaign              Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stepIndex             Int      // 0 = Initial, 1 = Follow-up 1, 2 = Follow-up 2...
+  purpose               String   // "Initial Outreach", "Value Proposition", "Partnership Proposal", "Breakup / Permission Close"
+  delayDays             Int      @default(3)
+  delayBusinessDaysOnly Boolean  @default(true)
+  subjectMode           String   @default("THREADED") // "THREADED" or "STANDALONE"
+  customSubject         String?
+  templateId            String
+  template              Template @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  promptInstructions    String?
+  createdAt             DateTime @default(now()) @db.Timestamptz
+  updatedAt             DateTime @updatedAt @db.Timestamptz
+
+  @@unique([campaignId, stepIndex])
+  @@index([campaignId])
+  @@map("campaign_sequence_steps")
+}
+
+model CampaignRecipientState {
+  id               String                 @id @default(cuid())
+  campaignId       String
+  campaign         Campaign               @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contactId        String?
+  contact          Contact?               @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  email            String                 @db.Citext
+  state            RecipientSequenceState @default(PENDING_INITIAL)
+  currentStepIndex Int                    @default(0)
+  nextActionAt     DateTime?              @db.Timestamptz
+  nextStepIndex    Int?
+  pausedReason     String?
+  cancelledReason  String?
+  lastSentAt       DateTime?              @db.Timestamptz
+  lastMessageId    String?
+  repliedAt        DateTime?              @db.Timestamptz
+  bouncedAt        DateTime?              @db.Timestamptz
+  unsubscribedAt   DateTime?              @db.Timestamptz
+  createdAt        DateTime               @default(now()) @db.Timestamptz
+  updatedAt        DateTime               @updatedAt @db.Timestamptz
+
+  @@unique([campaignId, email])
+  @@index([campaignId, state])
+  @@index([nextActionAt])
+  @@map("campaign_recipient_states")
+}
+
+// ============================================================================
+// SUPPRESSION
+// ============================================================================
+
+model SuppressionEntry {
+  id         String            @id @default(cuid())
+  email      String            @unique @db.Citext
+  reason     SuppressionReason
+  source     String
+  campaignId String?
+  metadata   Json              @default("{}")
+  createdAt  DateTime          @default(now()) @db.Timestamptz
+  expiresAt  DateTime?         @db.Timestamptz
+
+  @@index([reason])
+  @@map("suppression_entries")
+}
+
+// ============================================================================
+// ENRICHMENT — proposals with evidence; never applied without a person's say-so
+// ============================================================================
+
+model Enrichment {
+  id          String           @id @default(cuid())
+  contactId   String
+  contact     Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  source      String // where it came from: "LinkedIn", "Company website", ...
+  field       String // contact field or custom field name
+  value       String
+  confidence  Float            @default(0.5)
+  status      EnrichmentStatus @default(GUESSED)
+  // { url, note }
+  evidence    Json             @default("{}")
+  createdById String?
+  verifiedAt  DateTime?        @db.Timestamptz
+  verifiedBy  String?
+  appliedAt   DateTime?        @db.Timestamptz
+  createdAt   DateTime         @default(now()) @db.Timestamptz
+  updatedAt   DateTime         @updatedAt @db.Timestamptz
+
+  @@index([contactId, field])
+  @@map("enrichments")
+}
+
+// ============================================================================
+// ORGANIZATION USERS & AUTH — see docs/AUTH.md
+// Users are disabled, never deleted, so approvals and audit entries keep their author.
+// ============================================================================
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique @db.Citext
+  name         String
+  role         UserRole   @default(EMPLOYEE)
+  status       UserStatus @default(INVITED)
+  // Null until the invite is accepted and a password is set
+  passwordHash String?
+  invitedById  String?
+  invitedBy    User?      @relation("UserInvitedBy", fields: [invitedById], references: [id], onDelete: Restrict)
+  lastLoginAt  DateTime?  @db.Timestamptz
+  senderName   String?
+  sendingEmail String?
+  createdAt    DateTime   @default(now()) @db.Timestamptz
+  updatedAt    DateTime   @updatedAt @db.Timestamptz
+
+  invitedUsers       User[]        @relation("UserInvitedBy")
+  sessions           Session[]
+  authTokens         AuthToken[]
+  campaignsCreated   Campaign[]    @relation("CampaignCreatedBy")
+  campaignsRequested Campaign[]    @relation("CampaignApprovalRequestedBy")
+  campaignsApproved  Campaign[]    @relation("CampaignApprovedBy")
+  auditLogs          AuditLog[]
+  imports            ImportBatch[]
+
+  @@index([role, status])
+  @@map("users")
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  // SHA-256 of the cookie token; the raw token is never stored
+  tokenHash  String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime @db.Timestamptz
+  lastSeenAt DateTime @default(now()) @db.Timestamptz
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  ipAddress  String?
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// Single-use tokens for invite acceptance and password reset (stored hashed)
+model AuthToken {
+  id        String           @id @default(cuid())
+  tokenHash String           @unique
+  purpose   AuthTokenPurpose
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime         @db.Timestamptz
+  usedAt    DateTime?        @db.Timestamptz
+  createdAt DateTime         @default(now()) @db.Timestamptz
+
+  @@index([userId, purpose])
+  @@map("auth_tokens")
+}
+
+// ============================================================================
+// AUDIT & SETTINGS
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String // "campaign.approve", "contacts.import", ...
+  entityId   String?
+  entityType String?
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  metadata   Json     @default("{}")
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// Small key/value state, e.g. the IMAP monitor's last processed UID
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("settings")
+}

@@ -1,0 +1,81 @@
+@import "./tokens.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-canvas text-ink text-sm;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: rgb(var(--brand) / 0.18);
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand));
+    outline-offset: 2px;
+  }
+  /* Inputs draw their own focus ring */
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+  }
+  /* Keep autofilled fields white instead of the browser's blue tint */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: rgb(var(--ink));
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--surface)) inset;
+    caret-color: rgb(var(--ink));
+    transition: background-color 9999s ease-out 0s;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply text-ink;
+    letter-spacing: -0.01em;
+  }
+  code,
+  kbd {
+    @apply font-mono text-[0.85em];
+  }
+  /* Tabular numbers wherever counts are compared */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* Form controls share one look */
+  .control {
+    @apply block w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink shadow-xs
+      placeholder:text-ink-faint transition-colors
+      hover:border-line-strong
+      focus:border-brand focus:shadow-focus
+      disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-subtle;
+  }
+  .control[aria-invalid="true"] {
+    @apply border-danger focus:shadow-[0_0_0_3px_rgb(var(--danger)/0.18)];
+  }
+  .link {
+    @apply font-medium text-brand hover:text-brand-hover hover:underline underline-offset-2;
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

@@ -1,0 +1,27 @@
+{
+  // Editor config: covers the whole repo so the IDE type-checks client, server, shared, tests and
+  // tool configs with the same rules as the build. Builds use tsconfig.client.json / tsconfig.server.json.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": true,
+    "checkJs": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/client/*"],
+      "@shared/*": ["src/shared/*"]
+    }
+  },
+  "include": ["src", "tests", "api", "scripts", "*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,62 @@
+# ---------------------------------------------------------------------------
+# Secrets & environment — never commit. Only .env.example is shared.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+.envrc
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+.secrets/
+secrets/
+*.credentials
+*.credentials.*
+
+# Vercel CLI link + pulled env (contains project ids and env values)
+.vercel/
+
+# ---------------------------------------------------------------------------
+# Dependencies & build output
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Local data, logs, test & tool artifacts
+# ---------------------------------------------------------------------------
+prisma/*.db
+prisma/*.db-journal
+*.sql.gz
+*.dump
+logs/
+*.log
+npm-debug.log*
+coverage/
+test-results/
+playwright-report/
+.cache/
+tmp/
+scratch/
+.tempmediaStorage/
+docs/rendered-samples/
+bore.exe
+
+# ---------------------------------------------------------------------------
+# Editor, OS and local agent settings
+# ---------------------------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.sublime-workspace
+*.sublime-project
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+.claude/settings.local.json
+.agents/scratch/
