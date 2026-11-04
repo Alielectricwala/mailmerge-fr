@@ -2,6 +2,7 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
+import { useAuthMode } from "./hub";
 import { canAct, type LoginInput, type Permission, type SessionUser } from "@shared/auth";
 
 export type AuthStatus = "loading" | "authenticated" | "anonymous" | "unavailable";
@@ -18,6 +19,8 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   /** After accepting an invite / resetting a password the server already set the session */
   refresh: () => Promise<unknown>;
+  /** After signing in through the Workspace (/sso): the server set the session and returned the user */
+  adopt: (user: SessionUser) => void;
   retry: () => void;
 }
 
@@ -61,6 +64,7 @@ async function fetchMe(): Promise<SessionUser | null> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
+  const mode = useAuthMode();
   const me = useQuery({
     queryKey: meQueryKey,
     queryFn: fetchMe,
@@ -101,9 +105,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await login.mutateAsync(input);
     },
     logout: async () => {
+      const hubUrl = mode.data?.hub ? mode.data.hubUrl : null;
       await logout.mutateAsync();
+      // Hub mode: back to the Workspace, which is where people sign in
+      if (hubUrl) window.location.assign(hubUrl);
     },
     refresh: () => qc.invalidateQueries({ queryKey: meQueryKey }),
+    adopt: (signedIn) => {
+      setSignedOut(false);
+      setCachedUser(signedIn);
+      qc.setQueryData(meQueryKey, signedIn);
+    },
     retry: () => void me.refetch(),
   };
 

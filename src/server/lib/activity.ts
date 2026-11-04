@@ -7,6 +7,10 @@ const plural = (n: unknown, word: string) => `${s(n)} ${word}${Number(n) === 1 ?
 const SUMMARIES: Record<string, (m: Meta) => string> = {
   "auth.login": () => "signed in",
   "auth.change_password": () => "changed their password",
+  "auth.hub_login": () => "signed in through the Workspace",
+  "hub.user_created": (m) => `joined from the Workspace (${s(m.employeeCode)}) as ${s(m.role).toLowerCase()}`,
+  "hub.role_synced": (m) => `had their role updated from the Workspace (${s(m.from).toLowerCase()} → ${s(m.to).toLowerCase()})`,
+  "hub.kept_last_founder": () => "stayed a founder: the Workspace no longer lists them as one, but the team needs at least one active founder",
   "team.invite": (m) => `invited ${s(m.email)} as ${s(m.role).toLowerCase()}`,
   "team.accept_invite": () => "accepted their invite and joined the team",
   "team.update": (m) => `updated ${s(m.email)}${m.role ? ` (role: ${s(m.role).toLowerCase()})` : ""}${m.status ? ` (status: ${s(m.status).toLowerCase()})` : ""}`,

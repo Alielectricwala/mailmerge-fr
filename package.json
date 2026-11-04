@@ -23,6 +23,7 @@
     "test:watch": "vitest",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css,md}\"",
     "user:create": "tsx src/server/scripts/create-user.ts",
+    "user:link": "tsx src/server/scripts/link-employee.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

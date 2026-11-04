@@ -63,16 +63,17 @@ export function clearSessionCache(): void {
   sessionCache.clear();
 }
 
-function hashToken(token: string): string {
+export function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 export async function createSession(
   userId: string,
-  meta: { ipAddress?: string; userAgent?: string }
+  meta: { ipAddress?: string; userAgent?: string },
+  ttlMs: number = SESSION_TTL_MS
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = crypto.randomBytes(32).toString("base64url");
-  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  const expiresAt = new Date(Date.now() + ttlMs);
   await prisma.session.create({
     data: { tokenHash: hashToken(token), userId, expiresAt, ipAddress: meta.ipAddress, userAgent: meta.userAgent },
   });
@@ -162,7 +163,8 @@ export async function consumeAuthToken(id: string): Promise<boolean> {
 
 export function toSessionUser(user: {
   id: string;
-  email: string;
+  email: string | null;
+  employeeCode?: string | null;
   name: string;
   role: SessionUser["role"];
   status: SessionUser["status"];
@@ -172,6 +174,7 @@ export function toSessionUser(user: {
   return {
     id: user.id,
     email: user.email,
+    employeeCode: user.employeeCode ?? null,
     name: user.name,
     role: user.role,
     status: user.status,

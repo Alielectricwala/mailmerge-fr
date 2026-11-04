@@ -2,7 +2,7 @@
 // Rule: the organization always keeps at least MIN_ACTIVE_FOUNDERS active founders.
 import type { Request } from "express";
 import prisma from "../db.js";
-import { env, smtpConfigured } from "../config.js";
+import { env, hubMode, smtpConfigured } from "../config.js";
 import { AppError } from "../middleware/error-handler.js";
 import { audit } from "../lib/audit.js";
 import { MIN_ACTIVE_FOUNDERS, ROLE_LABELS, type UserRole } from "../../shared/auth.js";
@@ -15,7 +15,8 @@ const INVITE_TTL_HOURS = 7 * 24;
 const RESET_TTL_HOURS = 24;
 
 const resolveBaseUrl = (req?: Request): string => {
-  if (req) {
+  // Hub mode: the request comes in on the hub's address, without the /mail prefix; PUBLIC_URL has it
+  if (req && !hubMode) {
     const origin = req.get("origin");
     if (origin && origin.startsWith("http")) return origin.replace(/\/+$/, "");
     const referer = req.get("referer");
@@ -54,7 +55,7 @@ ${emailBrandHeader()}
   }
 }
 
-async function activeFounderCount(excludingUserId?: string) {
+export async function activeFounderCount(excludingUserId?: string) {
   return prisma.user.count({ where: { role: "FOUNDER", status: "ACTIVE", ...(excludingUserId ? { id: { not: excludingUserId } } : {}) } });
 }
 
@@ -70,7 +71,7 @@ export async function inviteUser(req: Request, input: { email: string; name: str
   const url = link(req, "/accept-invite", token);
   const emailed = input.sendEmail
     ? await emailLink(
-        user.email,
+        input.email,
         `${req.user!.name} invited you to FocusRealm Mail Merge`,
         `${req.user!.name} invited you to join FocusRealm Mail Merge as ${ROLE_LABELS[input.role].toLowerCase()}. Set your password to get started. This link works for 7 days.`,
         url,
@@ -116,7 +117,7 @@ export async function createResetLink(req: Request, id: string, sendEmail: boole
   if (user.status !== "ACTIVE") throw AppError.badRequest("NOT_ACTIVE", "Only active members can reset their password.");
   const token = await createAuthToken(user.id, "PASSWORD_RESET", RESET_TTL_HOURS);
   const url = link(req, "/reset-password", token);
-  const emailed = sendEmail
+  const emailed = sendEmail && user.email
     ? await emailLink(user.email, "Reset your FocusRealm Mail Merge password", "A founder created a password reset link for your account. It works once, for 24 hours.", url, "Choose a new password")
     : false;
   await audit(req, { action: "team.reset_link", entityType: "User", entityId: id, metadata: { email: user.email, emailed } });

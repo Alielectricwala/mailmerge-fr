@@ -6,6 +6,7 @@ import { api, errorMessage } from "../../lib/api";
 import { useActivity, useInvalidate, useMailbox, useTeam } from "../../lib/queries";
 import { copyText, useTitle } from "../../lib/hooks";
 import { useAuth } from "../../lib/auth";
+import { useAuthMode } from "../../lib/hub";
 import { formatDateTime, initials, num, timeAgo } from "../../lib/format";
 import { PageHeader, Tabs, ActionMenu } from "../../components/ui/Navigation";
 import { DescriptionList, Panel } from "../../components/ui/Card";
@@ -300,6 +301,10 @@ function InviteDialog({ open, onClose, onInvited }: { open: boolean; onClose: ()
 
 function TeamTab() {
   const { user, can } = useAuth();
+  const mode = useAuthMode();
+  const hub = Boolean(mode.data?.hub);
+  // Hub mode: passwords live in the Workspace; only founders keep one, for the break-glass sign-in
+  const canResetPassword = (m: TeamMemberDto) => !hub || (Boolean(mode.data?.passwordLogin) && m.role === "FOUNDER");
   const team = useTeam();
   const toast = useToast();
   const invalidate = useInvalidate();
@@ -330,7 +335,7 @@ function TeamTab() {
   const manage = can("users.manage");
   const confirmText = confirm && {
     disable: { title: `Disable ${confirm.member.name}?`, description: "They're signed out and can't sign in. Their history stays.", label: "Disable", body: { status: "DISABLED" } },
-    enable: { title: `Re-enable ${confirm.member.name}?`, description: "They can sign in again with their password.", label: "Enable", body: { status: "ACTIVE" } },
+    enable: { title: `Re-enable ${confirm.member.name}?`, description: hub ? "They can open Mail Merge from the Workspace again." : "They can sign in again with their password.", label: "Enable", body: { status: "ACTIVE" } },
     founder: { title: `Make ${confirm.member.name} a founder?`, description: "Founders can approve campaigns and manage the team and settings.", label: "Make founder", body: { role: "FOUNDER" } },
     employee: { title: `Change ${confirm.member.name} to employee?`, description: "They'll no longer be able to approve campaigns or manage the team.", label: "Change role", body: { role: "EMPLOYEE" } },
   }[confirm.action];
@@ -339,9 +344,13 @@ function TeamTab() {
     <div className="space-y-6">
       <Panel
         title="Team"
-        description="Founders approve campaigns; employees prepare them."
+        description={
+          hub
+            ? "People join from the Focus Realm HR console: they appear here the first time they open Mail Merge from the Workspace. Founders approve campaigns; employees prepare them."
+            : "Founders approve campaigns; employees prepare them."
+        }
         flush
-        actions={manage && <Button variant="primary" size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setInviting(true)}>Invite</Button>}
+        actions={manage && !hub && <Button variant="primary" size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setInviting(true)}>Invite</Button>}
       >
         {team.isPending ? (
           <PageLoader />
@@ -357,7 +366,7 @@ function TeamTab() {
                     {m.name} {m.id === user?.id && <span className="font-normal text-ink-subtle">(you)</span>}
                   </p>
                   <p className="truncate text-xs text-ink-subtle">
-                    {m.email} · {m.status === "INVITED" ? `invited${m.invitedBy ? ` by ${m.invitedBy}` : ""} ${timeAgo(m.createdAt)}` : m.lastLoginAt ? `last signed in ${timeAgo(m.lastLoginAt)}` : "hasn't signed in"}
+                    {[m.employeeCode, m.email].filter(Boolean).join(" · ")} · {m.status === "INVITED" ? `invited${m.invitedBy ? ` by ${m.invitedBy}` : ""} ${timeAgo(m.createdAt)}` : m.lastLoginAt ? `last signed in ${timeAgo(m.lastLoginAt)}` : "hasn't signed in"}
                   </p>
                 </div>
                 <Badge tone={m.role === "FOUNDER" ? "info" : "neutral"}>{ROLE_LABELS[m.role]}</Badge>
@@ -367,8 +376,8 @@ function TeamTab() {
                     items={[
                       { label: "Make founder", onSelect: () => setConfirm({ member: m, action: "founder" }), hidden: m.role === "FOUNDER" || m.status === "DISABLED" },
                       { label: "Change to employee", onSelect: () => setConfirm({ member: m, action: "employee" }), hidden: m.role === "EMPLOYEE" },
-                      { label: "Resend invite", onSelect: () => resendInvite.mutate(m), hidden: m.status !== "INVITED" },
-                      { label: "Send password reset link", onSelect: () => reset.mutate(m), hidden: m.status !== "ACTIVE" },
+                      { label: "Resend invite", onSelect: () => resendInvite.mutate(m), hidden: hub || m.status !== "INVITED" },
+                      { label: "Send password reset link", onSelect: () => reset.mutate(m), hidden: m.status !== "ACTIVE" || !canResetPassword(m) },
                       { label: "Re-enable", onSelect: () => setConfirm({ member: m, action: "enable" }), hidden: m.status !== "DISABLED" },
                       { label: "Disable", tone: "danger", onSelect: () => setConfirm({ member: m, action: "disable" }), hidden: m.status !== "ACTIVE" },
                     ]}
@@ -451,6 +460,10 @@ function ActivityTab() {
 
 function AccountTab() {
   const { user, refresh } = useAuth();
+  const mode = useAuthMode();
+  const hub = Boolean(mode.data?.hub);
+  // Hub mode: the password is the Workspace's; founders keep one here only for the break-glass sign-in
+  const ownPassword = !hub || (Boolean(mode.data?.passwordLogin) && user?.role === "FOUNDER");
   const toast = useToast();
 
   const [senderName, setSenderName] = useState(user?.senderName ?? user?.name ?? "");
@@ -495,7 +508,7 @@ function AccountTab() {
         <DescriptionList
           items={[
             { label: "Name", value: user?.name },
-            { label: "Login Email", value: user?.email },
+            ...(hub ? [{ label: "Employee ID", value: user?.employeeCode ?? "—" }, { label: "Email", value: user?.email ?? "—" }] : [{ label: "Login Email", value: user?.email }]),
             { label: "Role", value: user && ROLE_LABELS[user.role] },
           ]}
         />
@@ -541,7 +554,13 @@ function AccountTab() {
         </div>
       </Panel>
 
-      <Panel title="Change password">
+      {hub && !ownPassword && (
+        <Panel title="Password">
+          <p className="text-[13px] text-ink-muted">You sign in with your Focus Realm employee ID and password. Change your password in the Workspace.</p>
+        </Panel>
+      )}
+
+      {ownPassword && <Panel title="Change password">
         <div className="space-y-4">
           <TextField label="Current password" type="password" autoComplete="current-password" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} />
           <div className="grid gap-4 sm:grid-cols-2">
@@ -553,7 +572,7 @@ function AccountTab() {
             <Button variant="primary" onClick={submit} loading={change.isPending} disabled={!form.currentPassword || !form.newPassword}>Change password</Button>
           </div>
         </div>
-      </Panel>
+      </Panel>}
     </div>
   );
 }

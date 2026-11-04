@@ -15,7 +15,7 @@ Personalized outreach from your own SpaceMail mailbox, with a founder's approval
 | **Compliance** | Signed one-click unsubscribe (RFC 8058) plus a footer on every email; suppression list checked at approval and again right before each send |
 | **Follow-up** | Optional read-only IMAP monitor detects bounce reports and replies; hard bounces are suppressed automatically |
 | **Enrichment** | Researched details recorded with source, evidence link and confidence; verified by a person; applied to a contact only on request, never silently overwriting |
-| **Team** | Founders and employees; invites, role changes, disable, password reset links; activity log for founders |
+| **Team** | Founders and employees; invites, role changes, disable, password reset links; activity log for founders. Optionally, sign-in through the Focus Realm Workspace with HR-issued employee IDs, served at `<Workspace>/mail` |
 
 ## Requirements
 
@@ -56,6 +56,7 @@ Keep the printed demo passwords private. Local environment files, credentials, a
 | `DAILY_SEND_LIMIT` | Mailbox-wide cap per rolling 24 hours. Sending waits, then resumes automatically |
 | `IMAP_*`, `IMAP_POLL_ENABLED` | Read-only bounce/reply detection |
 | `CRON_SECRET` | Vercel only: authorizes the sending-burst endpoint |
+| `FOCUS_REALM_HUB_SECRET`, `FOCUS_REALM_HUB_URL` | Optional: sign in through the Focus Realm Workspace instead (see `docs/AUTH.md`) |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Optional AI drafting in the template editor. Only the brief, an example and field names are sent; never contact data |
 
 ## Run
@@ -96,4 +97,4 @@ prisma/          schema and migrations
 docs/            architecture review, auth notes
 ```
 
-See `docs/DEPLOYMENT.md` for Vercel, `docs/ARCHITECTURE_REVIEW.md` for design decisions and `docs/AUTH.md` for roles.
+See `docs/DEPLOYMENT.md` for Vercel, `docs/ARCHITECTURE_REVIEW.md` for design decisions and `docs/AUTH.md` for roles and sign-in (including through the Focus Realm Workspace).

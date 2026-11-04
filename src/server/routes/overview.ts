@@ -186,7 +186,7 @@ activityRouter.get(
   requirePermission("audit.view"),
   asyncHandler(async (req, res) => {
     const { page, pageSize } = PaginationQuerySchema.parse(req.query);
-    const where = { action: { not: "auth.login" } };
+    const where = { action: { notIn: ["auth.login", "auth.hub_login"] } };
     const [rows, total] = await Promise.all([
       prisma.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, include: { user: { select: { id: true, name: true } } }, ...skipTake(page, pageSize) }),
       prisma.auditLog.count({ where }),

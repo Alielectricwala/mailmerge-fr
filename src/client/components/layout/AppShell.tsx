@@ -1,7 +1,7 @@
 // Signed-in application frame: sidebar navigation + content area
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigation } from "react-router-dom";
-import { Ban, FileText, LayoutDashboard, ListChecks, LogOut, Menu, Send, Settings, Users, X, type LucideIcon } from "lucide-react";
+import { Ban, Briefcase, FileText, LayoutDashboard, LayoutGrid, ListChecks, LogOut, Menu, Send, Settings, Users, X, type LucideIcon } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { useAuth } from "../../lib/auth";
 import { initials } from "../../lib/format";
@@ -11,6 +11,7 @@ import { BrandLockup, BrandMark } from "./Brand";
 import { useQueryClient } from "@tanstack/react-query";
 import { keys } from "../../lib/queries";
 import { api } from "../../lib/api";
+import { hubLinks, useAuthMode } from "../../lib/hub";
 
 interface NavItem {
   to: string;
@@ -112,7 +113,7 @@ function UserCard() {
       </button>
       {open && (
         <div role="menu" className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-line bg-surface py-1 shadow-pop animate-pop-in">
-          <p className="truncate px-3 py-2 text-xs text-ink-subtle">{user.email}</p>
+          <p className="truncate px-3 py-2 text-xs text-ink-subtle">{[user.employeeCode, user.email].filter(Boolean).join(" · ")}</p>
           <NavLink role="menuitem" to="/settings/account" onClick={() => setOpen(false)} className="block px-3 py-2 text-[13px] text-ink hover:bg-surface-muted">
             Account & password
           </NavLink>
@@ -124,6 +125,31 @@ function UserCard() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Hub mode: the other Focus Realm apps. Plain links — each is its own app on the hub's address. */
+function HubLinks() {
+  const mode = useAuthMode();
+  const { user } = useAuth();
+  if (!mode.data?.hub || !mode.data.hubUrl) return null;
+  const links = hubLinks(mode.data.hubUrl);
+  const items = [
+    { href: links.workspace, label: "Workspace", icon: LayoutGrid },
+    ...(user?.role === "FOUNDER" ? [{ href: links.hrConsole, label: "HR console", icon: Briefcase }] : []),
+  ];
+  return (
+    <div>
+      <p className="mb-2 px-3 text-2xs font-semibold uppercase tracking-[0.12em] text-ink-faint">Focus Realm</p>
+      <div className="space-y-0.5">
+        {items.map(({ href, label, icon: Icon }) => (
+          <a key={label} href={href} className="flex items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink">
+            <Icon className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden="true" />
+            {label}
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
@@ -145,6 +171,7 @@ function SidebarContent() {
             </div>
           </div>
         ))}
+        <HubLinks />
       </nav>
       <div className="space-y-1 border-t border-line p-3">
         <NavItemLink item={{ to: "/settings", label: "Settings", icon: Settings }} />
