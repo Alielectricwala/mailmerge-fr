@@ -6,7 +6,7 @@
 //   • from /api/internal/tick (Vercel Cron, an external scheduler, or the previous burst)
 // Self-hosted servers don't use this: they run SendWorker.start() and InboxMonitor continuously.
 import { waitUntil } from "@vercel/functions";
-import { env, imapConfigured, isServerless } from "../config.js";
+import { env, imapConfigured, isServerless, selfOrigin } from "../config.js";
 import { acquireLease, hasQueuedWork, recoverInterruptedSends, releaseLease, SendWorker } from "./send-worker.js";
 import { checkInbox, getImapState } from "./inbox-monitor.js";
 
@@ -54,7 +54,8 @@ export async function runBurst(budgetMs = BURST_MS): Promise<BurstResult> {
 
 /**
  * Asks the production deployment for another burst (a separate invocation with a fresh time limit).
- * Uses PUBLIC_URL — the per-deployment VERCEL_URL can sit behind Deployment Protection.
+ * Uses selfOrigin (PUBLIC_URL, or the production domain in hub mode) — the per-deployment VERCEL_URL
+ * can sit behind Deployment Protection.
  * Preview deployments never chain, so they can't drive sending.
  */
 async function requestNextBurst() {
@@ -63,7 +64,7 @@ async function requestNextBurst() {
     console.warn("[background] CRON_SECRET is not set; remaining messages wait for the next scheduled tick.");
     return;
   }
-  await fetch(`${env.PUBLIC_URL.replace(/\/$/, "")}/api/internal/tick`, {
+  await fetch(`${selfOrigin}/api/internal/tick`, {
     method: "POST",
     headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
   }).catch((err) => console.error("[background] couldn't request the next burst:", (err as Error).message));

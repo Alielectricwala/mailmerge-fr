@@ -19,6 +19,7 @@ const tables = [
   'settings',
   'suppression_entries',
   'templates',
+  'used_hub_tickets',
   'users',
 ];
 

@@ -476,7 +476,11 @@ model Enrichment {
 
 model User {
   id           String     @id @default(cuid())
-  email        String     @unique @db.Citext
+  // Null for people who only sign in through the Workspace: Focus Realm mailboxes are shared, so the
+  // Workspace's email isn't unique and is only stored when no one else here uses it
+  email        String?    @unique @db.Citext
+  // Workspace employee ID (FR-0042), stored upper-case. Links this account to the Workspace sign-in.
+  employeeCode String?    @unique
   name         String
   role         UserRole   @default(EMPLOYEE)
   status       UserStatus @default(INVITED)
@@ -518,6 +522,17 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+// Workspace launch tickets already exchanged for a session, kept (hashed) until they expire so each
+// ticket works once
+model UsedHubTicket {
+  tokenHash String   @id
+  expiresAt DateTime @db.Timestamptz
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([expiresAt])
+  @@map("used_hub_tickets")
 }
 
 // Single-use tokens for invite acceptance and password reset (stored hashed)

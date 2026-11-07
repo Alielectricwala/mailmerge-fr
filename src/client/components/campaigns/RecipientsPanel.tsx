@@ -20,7 +20,7 @@ import {
   type CampaignRecipientStateDto,
   type RecipientSequenceState,
 } from "@shared/types";
-import { api, errorMessage } from "../../lib/api";
+import { api, apiUrl, errorMessage } from "../../lib/api";
 import { useInvalidate, useSends, type SendDetail } from "../../lib/queries";
 import { useDebounced } from "../../lib/hooks";
 import { useAuth } from "../../lib/auth";
@@ -656,7 +656,7 @@ export function RecipientsPanel({ campaignId, counts, live, fromLine, initialFil
             </Button>
           )}
           <SearchInput value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Find an email" className="w-56" />
-          <a href={`/api/campaigns/${campaignId}/export`} className={buttonClasses("secondary", "md")} download>
+          <a href={apiUrl(`/api/campaigns/${campaignId}/export`)} className={buttonClasses("secondary", "md")} download>
             <Download className="h-4 w-4" /> Export
           </a>
         </div>

@@ -125,7 +125,10 @@ export function canAct(user: Pick<SessionUser, "role" | "status">, permission: P
 /** The authenticated user as exposed to the client (never includes secrets). */
 export const SessionUserSchema = z.object({
   id: z.string(),
-  email: EmailSchema,
+  /** Null for some people who sign in through the Workspace (its mailboxes can be shared) */
+  email: EmailSchema.nullable(),
+  /** Workspace employee ID (FR-0042), for people who sign in through the Workspace */
+  employeeCode: z.string().nullable().optional(),
   name: z.string(),
   role: UserRoleSchema,
   status: UserStatusSchema,
@@ -182,4 +185,11 @@ export type UpdateUserInput = z.infer<typeof UpdateUserSchema>;
 
 export const PASSWORD_MIN_LENGTH = 12;
 export const SESSION_TTL_DAYS = 14;
+/** Sessions started from the Workspace are short, so someone offboarded there loses access within a day */
+export const HUB_SESSION_TTL_HOURS = 12;
 export const SESSION_COOKIE_NAME = "fr_session";
+/**
+ * Hub mode: the Workspace already uses fr_session on the shared address, so this app's cookie gets
+ * its own name (and is scoped to the /mail path).
+ */
+export const HUB_SESSION_COOKIE_NAME = "fr_mail_session";

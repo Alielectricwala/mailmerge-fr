@@ -52,6 +52,7 @@ const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       { path: "/login", lazy: page(() => import("./pages/auth/LoginPage"), (m) => m.LoginPage) },
+      { path: "/sso", lazy: page(() => import("./pages/auth/SsoPage"), (m) => m.SsoPage) },
       { path: "/accept-invite", lazy: page(() => import("./pages/auth/TokenPages"), (m) => m.AcceptInvitePage) },
       { path: "/reset-password", lazy: page(() => import("./pages/auth/TokenPages"), (m) => m.ResetPasswordPage) },
       {
@@ -83,7 +84,10 @@ const router = createBrowserRouter([
       },
     ],
   },
-]);
+], {
+  // "/" or e.g. "/mail" when served on the Focus Realm hub (VITE_BASE_PATH)
+  basename: import.meta.env.BASE_URL.replace(/\/$/, "") || "/",
+});
 
 export default function App() {
   return (

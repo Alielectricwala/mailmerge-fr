@@ -12,7 +12,8 @@ import { brandMarkSvg } from "../lib/brand.js";
 export const publicRouter = Router();
 publicRouter.use(express.urlencoded({ extended: false, limit: "4kb" }));
 
-function page(res: Response, status: number, title: string, body: string) {
+/** A small branded page for people arriving from emails or links, outside the app */
+export function page(res: Response, status: number, title: string, body: string) {
   res
     .status(status)
     .set({

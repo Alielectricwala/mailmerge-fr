@@ -55,6 +55,9 @@ Use a **separate database for Preview deployments**. Preview builds never run mi
 | `DAILY_SEND_LIMIT` | Stay under your SpaceMail plan's daily limit |
 | `IMAP_HOST`, `IMAP_PORT`, `IMAP_USER`, `IMAP_PASS`, `IMAP_POLL_ENABLED` | Optional bounce/reply detection |
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | Optional AI template drafting. Without a key, the template writer offers starter templates only |
+| `FOCUS_REALM_HUB_SECRET`, `FOCUS_REALM_HUB_URL` | Optional: sign in through the Focus Realm Workspace (section 6). Leave unset until then |
+| `VITE_BASE_PATH` | Optional, build-time: `/mail/` when served on the Workspace (section 6) |
+| `ALLOW_PASSWORD_LOGIN` | Hub mode only: `true` lets founders use the email/password form when the Workspace is down |
 
 Vercel sets `NODE_ENV=production` itself. That makes session cookies `Secure`, which is correct because Vercel serves HTTPS.
 
@@ -75,6 +78,28 @@ Open the printed link to set your password. Invite everyone else from **Settings
 1. Open **Settings → Mailbox → Test connection**. It signs in to SpaceMail and sends nothing.
 2. Create a campaign and **Send test** to yourself. Check the email arrives and that the unsubscribe link opens on your domain.
 3. Set `ALLOW_LIVE_SENDING=true` and redeploy (env changes apply on the next deployment).
+
+## 6. Join the Focus Realm website (/mail)
+
+Optional. Afterwards people open Mail Merge from the Workspace (`sehejsharm/employee-management`) at `<Workspace>/mail` and sign in with their HR-issued employee ID; this app's own sign-in screen goes away. How it works: [AUTH.md](AUTH.md#signing-in-through-the-focus-realm-workspace-hub-mode). Do it in this order:
+
+1. **Deploy this app as usual**, with the hub variables unset. The build applies the migrations that add employee IDs.
+2. **Link existing members** to their Workspace employee IDs, against the production database (as in section 4), so their first Workspace sign-in opens their existing account:
+   ```bash
+   npx tsx --env-file=.env.production.local src/server/scripts/link-employee.ts --email you@focusrealm.com --employee-code FR-0001
+   ```
+3. **Workspace:** deploy the `/mail` routing and `/launch/mail` (the Workspace-side change), and set `MAILMERGE_ORIGIN` to this app's **production domain** (e.g. `https://fr-mailer.vercel.app`; never a per-deployment URL, which sits behind Vercel's login). Redeploy the Workspace.
+4. **This app** (Production): set
+   - `FOCUS_REALM_HUB_SECRET`: copy the Workspace's value exactly;
+   - `FOCUS_REALM_HUB_URL`: the Workspace's production address;
+   - `VITE_BASE_PATH` = `/mail/` (it's read at build time, so it needs a new deployment);
+   - `PUBLIC_URL` = `<Workspace address>/mail` (unsubscribe links in new emails go through the Workspace).
+   Then **redeploy**.
+5. **Check:** sign in to the Workspace and choose Mail Merge. You should land on the overview. `https://<this app>/campaigns` should now redirect to `<Workspace>/mail/campaigns`, and `https://<this app>/health` should still answer.
+
+What keeps working on this app's own domain: Vercel Cron and the burst chain (`/api/internal/tick`; in hub mode bursts call the production domain directly, so sending doesn't depend on the Workspace), unsubscribe links in emails already sent (`/u/…`), and `/health`.
+
+**To go back**, unset `FOCUS_REALM_HUB_SECRET`, `FOCUS_REALM_HUB_URL` and `VITE_BASE_PATH`, set `PUBLIC_URL` to this app's domain, and redeploy. People need a password again: send them reset links from Settings → Team. Unsubscribe links in emails sent during hub mode point at the Workspace, so keep its `/mail` routing in place.
 
 ## Limits to know
 

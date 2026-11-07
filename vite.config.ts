@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import fs from "fs";
 import { parse } from "dotenv";
+import { normalizeBasePath } from "./src/shared/hub";
 
 // Proxy to the API on the PORT the server reads from .env. Parsed directly: Vite's loadEnv()
 // would also pick up the server's NODE_ENV=development and switch the client build to React's
@@ -22,8 +23,16 @@ function clientPort(): number {
 
 export default defineConfig(() => {
   const apiTarget = `http://127.0.0.1:${serverPort()}`;
+  // "/" by default; "/mail/" when the app is served on the Focus Realm hub (VITE_BASE_PATH, set at build time)
+  const base = normalizeBasePath(process.env.VITE_BASE_PATH);
+  // Under a base path the client calls /mail/api/…; the server sees it without the prefix, as on the hub
+  const underBase =
+    base === "/"
+      ? {}
+      : { [`${base}api`]: { target: apiTarget, changeOrigin: true, rewrite: (p: string) => p.slice(base.length - 1) } };
 
   return {
+    base,
     plugins: [react()],
     // The root .env belongs to the server; the client needs no env vars.
     envDir: path.resolve(__dirname, "src/client"),
@@ -40,6 +49,7 @@ export default defineConfig(() => {
         "/api": { target: apiTarget, changeOrigin: true },
         // Unsubscribe pages linked from emails
         "/u/": { target: apiTarget, changeOrigin: true },
+        ...underBase,
       },
     },
     build: {

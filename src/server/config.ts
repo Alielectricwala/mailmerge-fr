@@ -1,5 +1,6 @@
 // Server configuration — validated once at startup. See .env.example for every variable.
 import { z } from "zod";
+import { normalizeBasePath } from "../shared/hub.js";
 
 // z.coerce.boolean() treats any non-empty string (including "false") as true
 const envBoolean = z
@@ -62,6 +63,15 @@ const EnvSchema = z.object({
   // Vercel Cron sends it as "Authorization: Bearer <CRON_SECRET>". Generate with: openssl rand -hex 32
   CRON_SECRET: optionalString,
 
+  // The single Focus Realm website: with both set, people sign in through the Workspace, which serves
+  // this app under /mail. With either unset, sign-in works as before. See docs/AUTH.md.
+  FOCUS_REALM_HUB_SECRET: optionalString.pipe(z.string().min(32, "FOCUS_REALM_HUB_SECRET must be at least 32 characters").optional()),
+  FOCUS_REALM_HUB_URL: optionalString.pipe(z.string().url("FOCUS_REALM_HUB_URL must be a full address, e.g. https://employee-management.vercel.app").transform((v) => v.replace(/\/+$/, "")).optional()),
+  // Hub mode only: founders may still use the email/password form (for when the Workspace is down)
+  ALLOW_PASSWORD_LOGIN: envBoolean.default("false"),
+  // Where the client is served from, e.g. /mail/ on the hub. Read here for cookie paths and redirects.
+  VITE_BASE_PATH: optionalString,
+
   // Optional: Google Gemini drafts templates from a brief. Only the brief, an optional example email and
   // merge-field names are sent — never contact data. Get a key at https://aistudio.google.com/apikey
   GEMINI_API_KEY: optionalString,
@@ -91,6 +101,22 @@ export const isServerless = Boolean(process.env.VERCEL);
 export const smtpConfigured =Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.SMTP_FROM_EMAIL);
 export const imapConfigured = Boolean(env.IMAP_HOST && env.IMAP_USER && env.IMAP_PASS);
 export const aiConfigured = Boolean(env.GEMINI_API_KEY);
+
+/** Signed in through the Workspace: FOCUS_REALM_HUB_SECRET and FOCUS_REALM_HUB_URL are both set */
+export const hubMode = Boolean(env.FOCUS_REALM_HUB_SECRET && env.FOCUS_REALM_HUB_URL);
+
+/** "/" or e.g. "/mail/" — the client's base path (VITE_BASE_PATH) */
+export const basePath = normalizeBasePath(env.VITE_BASE_PATH);
+
+/**
+ * This app's own address, for calls it makes to itself (the burst chain). In hub mode PUBLIC_URL is
+ * the hub's /mail address, so prefer the production domain Vercel provides: bursts keep chaining
+ * even if the Workspace is down.
+ */
+export const selfOrigin =
+  hubMode && process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.trim().replace(/\/+$/, "")}`
+    : env.PUBLIC_URL.replace(/\/+$/, "");
 
 /** Why live sending is unavailable, or null if it is available */
 export function liveSendingBlocker(): string | null {

@@ -33,10 +33,15 @@ async function parse<T>(res: Response): Promise<ApiEnvelope<T>> {
   return body as ApiEnvelope<T>;
 }
 
+/** Prefixes an app path ("/api/…") with the base path the client is served from ("/" or "/mail/") */
+export function apiUrl(endpoint: string): string {
+  return endpoint.startsWith("/") ? `${import.meta.env.BASE_URL.replace(/\/$/, "")}${endpoint}` : endpoint;
+}
+
 async function request<T>(endpoint: string, init: RequestInit = {}): Promise<ApiEnvelope<T>> {
   let res: Response;
   try {
-    res = await fetch(endpoint, { credentials: "same-origin", ...init });
+    res = await fetch(apiUrl(endpoint), { credentials: "same-origin", ...init });
   } catch {
     throw new ApiError(0, "NETWORK", "Can't reach the server. Check your connection and that the app server is running.");
   }

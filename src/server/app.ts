@@ -3,6 +3,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import path from "path";
 import fs from "fs";
 import { env, isServerless } from "./config.js";
+import { HUB_HEADER, hubRedirectTarget } from "../shared/hub.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { loadSession, requireAuth } from "./middleware/session.js";
 import { authRouter, usersRouter } from "./routes/auth.js";
@@ -27,6 +28,21 @@ export function createApp() {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "same-origin");
     res.setHeader("X-Frame-Options", "DENY");
+    next();
+  });
+
+  // Hub mode: requests that reach this app's own address instead of the hub go to the same page there.
+  // middleware.js applies the same rule at Vercel's edge, before static files; this covers the API.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const query = req.originalUrl.indexOf("?");
+    const target = hubRedirectTarget({
+      pathname: req.path,
+      search: query >= 0 ? req.originalUrl.slice(query) : "",
+      headerValue: req.get(HUB_HEADER),
+      secret: env.FOCUS_REALM_HUB_SECRET,
+      hubUrl: env.FOCUS_REALM_HUB_URL,
+    });
+    if (target) return res.redirect(308, target);
     next();
   });
 

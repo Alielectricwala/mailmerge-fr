@@ -27,7 +27,7 @@ class FakeTransport implements MailTransport {
 
 describe("FocusRealm Mail Merge Verification Suite", () => {
   let fakeTransport: FakeTransport;
-  let testUser: { id: string; email: string; name: string; role: any };
+  let testUser: { id: string; email: string | null; name: string; role: any };
 
   beforeEach(async () => {
     fakeTransport = new FakeTransport();
