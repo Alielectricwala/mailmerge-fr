@@ -154,6 +154,23 @@ function HubLinks() {
   );
 }
 
+/** Simple sign-in: people share machines, so signing out is one click, not tucked in the menu */
+function SignOutButton() {
+  const mode = useAuthMode();
+  const { logout } = useAuth();
+  if (!mode.data?.simple) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => void logout()}
+      className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[13px] font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink"
+    >
+      <LogOut className="h-4 w-4 shrink-0 text-ink-faint" aria-hidden="true" />
+      Sign out
+    </button>
+  );
+}
+
 function SidebarContent() {
   return (
     <div className="flex h-full flex-col">
@@ -176,6 +193,7 @@ function SidebarContent() {
       <div className="space-y-1 border-t border-line p-3">
         <NavItemLink item={{ to: "/settings", label: "Settings", icon: Settings }} />
         <UserCard />
+        <SignOutButton />
       </div>
     </div>
   );

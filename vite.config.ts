@@ -23,8 +23,9 @@ function clientPort(): number {
 
 export default defineConfig(() => {
   const apiTarget = `http://127.0.0.1:${serverPort()}`;
-  // "/" by default; "/mail/" when the app is served on the Focus Realm hub (VITE_BASE_PATH, set at build time)
-  const base = normalizeBasePath(process.env.VITE_BASE_PATH);
+  // "/" by default; "/mail/" when the app is served on the Focus Realm hub (VITE_BASE_PATH, set at build time).
+  // Simple sign-in keeps the app at its own address, so always "/".
+  const base = process.env.SIMPLE_SIGNIN?.trim() === "true" ? "/" : normalizeBasePath(process.env.VITE_BASE_PATH);
   // Under a base path the client calls /mail/api/…; the server sees it without the prefix, as on the hub
   const underBase =
     base === "/"

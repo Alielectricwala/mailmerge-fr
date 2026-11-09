@@ -2,7 +2,7 @@
 import express, { type Request, type Response, type NextFunction } from "express";
 import path from "path";
 import fs from "fs";
-import { env, isServerless } from "./config.js";
+import { env, hubMode, isServerless } from "./config.js";
 import { HUB_HEADER, hubRedirectTarget } from "../shared/hub.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { loadSession, requireAuth } from "./middleware/session.js";
@@ -39,7 +39,8 @@ export function createApp() {
       pathname: req.path,
       search: query >= 0 ? req.originalUrl.slice(query) : "",
       headerValue: req.get(HUB_HEADER),
-      secret: env.FOCUS_REALM_HUB_SECRET,
+      // Off unless hub mode is (simple sign-in turns it off)
+      secret: hubMode ? env.FOCUS_REALM_HUB_SECRET : undefined,
       hubUrl: env.FOCUS_REALM_HUB_URL,
     });
     if (target) return res.redirect(308, target);

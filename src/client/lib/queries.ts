@@ -39,7 +39,7 @@ export const keys = {
   enrichment: (contactId: string) => ["enrichment", contactId] as const,
   mailbox: ["mailbox"] as const,
   team: ["team"] as const,
-  activity: (page: number) => ["activity", page] as const,
+  activity: (page: number, userId = "") => ["activity", page, userId] as const,
   templateAnalytics: (p: Record<string, unknown> = {}) => ["analytics", "templates", p] as const,
 };
 
@@ -141,8 +141,14 @@ export const useMailbox = () => useQuery({ queryKey: keys.mailbox, queryFn: () =
 
 export const useTeam = (enabled = true) => useQuery({ queryKey: keys.team, queryFn: () => api.get<TeamMemberDto[]>("/api/users"), enabled });
 
-export const useActivity = (page: number, enabled = true) =>
-  useQuery({ queryKey: keys.activity(page), queryFn: () => api.get<ActivityDto[]>(`/api/activity${qs({ page, pageSize: 30 })}`), enabled, placeholderData: keepPreviousData });
+/** Activity, optionally for one person (userId) */
+export const useActivity = (page: number, enabled = true, userId = "") =>
+  useQuery({
+    queryKey: keys.activity(page, userId),
+    queryFn: () => api.get<ActivityDto[]>(`/api/activity${qs({ page, pageSize: 30, userId })}`),
+    enabled,
+    placeholderData: keepPreviousData,
+  });
 
 /** Invalidate everything a campaign change can affect */
 export function useInvalidate() {

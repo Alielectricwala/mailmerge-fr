@@ -107,7 +107,8 @@ router.delete(
   requirePermission("contacts.manage"),
   asyncHandler(async (req, res) => {
     const id = IdSchema.parse(req.params.id);
-    await prisma.enrichment.delete({ where: { id } });
+    const row = await prisma.enrichment.delete({ where: { id } });
+    await audit(req, { action: "enrichment.delete", entityType: "Contact", entityId: row.contactId, metadata: { field: row.field } });
     ok(res, { id });
   })
 );

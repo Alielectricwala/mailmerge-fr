@@ -997,6 +997,8 @@ export interface ActivityDto {
   summary: string;
   entityType: string | null;
   entityId: string | null;
-  user: UserRef | null;
+  user: (UserRef & { employeeCode: string | null }) | null;
+  ipAddress: string | null;
+  userAgent: string | null;
   createdAt: string;
 }

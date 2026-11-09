@@ -20,7 +20,8 @@ import {
 } from "../services/auth-service.js";
 import { createResetLink, inviteUser, updateUser } from "../services/team-service.js";
 import { consumeHubTicket, HubTicketError, passwordSignInAllowed, upsertHubUser, verifyHubTicket } from "../services/hub-service.js";
-import { basePath, env, hubMode } from "../config.js";
+import { basePath, env, founderEmployeeCodes, hubMode, simpleSignin } from "../config.js";
+import { takeSimpleSignInAttempt, upsertSimpleUser } from "../services/simple-signin-service.js";
 import { page } from "./public.js";
 import { audit } from "../lib/audit.js";
 import { ok } from "../lib/http.js";
@@ -32,6 +33,8 @@ import {
   ChangePasswordSchema,
   HUB_SESSION_TTL_HOURS,
   InviteUserSchema,
+  SIMPLE_SESSION_TTL_HOURS,
+  SimpleSignInSchema,
   LoginSchema,
   ResetPasswordSchema,
   UpdateUserSchema,
@@ -66,10 +69,54 @@ authRouter.get("/mode", (_req, res) => {
   const mode: AuthModeDto = {
     hub: hubMode,
     hubUrl: hubMode ? env.FOCUS_REALM_HUB_URL! : null,
-    passwordLogin: !hubMode || env.ALLOW_PASSWORD_LOGIN,
+    passwordLogin: !simpleSignin && (!hubMode || env.ALLOW_PASSWORD_LOGIN),
+    simple: simpleSignin,
   };
   ok(res, mode);
 });
+
+// ----------------------------------------------------------------------------
+// Simple sign-in (SIMPLE_SIGNIN=true): full name + FR ID, self-declared, no password. See docs/AUTH.md.
+// ----------------------------------------------------------------------------
+
+/** Passwords, invites and resets don't exist in simple sign-in */
+function refuseInSimpleMode() {
+  if (simpleSignin) throw AppError.forbidden("SIMPLE_SIGNIN", "Sign in with your full name and FR ID.");
+}
+
+/** What a sign-in or sign-out leaves in Activity (time, IP and user agent are stored on every entry) */
+const signInMeta = (req: Request, typedName: string, employeeCode: string | null) => ({
+  typedName,
+  employeeCode,
+  ip: req.ip ?? null,
+  userAgent: req.get("user-agent")?.slice(0, 300) ?? null,
+});
+
+authRouter.post(
+  "/simple",
+  asyncHandler(async (req, res) => {
+    if (!simpleSignin) throw AppError.notFound("SIMPLE_SIGNIN_OFF", "Simple sign-in isn't turned on for this server.");
+    const wait = takeSimpleSignInAttempt(req.ip ?? "unknown");
+    if (wait !== null) {
+      res.setHeader("Retry-After", String(wait));
+      throw new AppError("TOO_MANY_ATTEMPTS", `Too many sign-in attempts from this network. Try again in ${Math.ceil(wait / 60)} minutes.`, 429);
+    }
+
+    const input = SimpleSignInSchema.parse(req.body);
+    const result = await upsertSimpleUser(input, founderEmployeeCodes);
+    // A role change ends the person's other sessions, as a founder's change does
+    if (result.roleChange) await revokeAllSessions(result.user.id);
+    await startSession(req, res, result.user.id, SIMPLE_SESSION_TTL_HOURS * 60 * 60 * 1000);
+    req.user = toSessionUser(result.user);
+
+    const meta = signInMeta(req, input.name, input.employeeCode);
+    if (result.created) await audit(req, { action: "simple.user_created", entityType: "User", entityId: result.user.id, metadata: { ...meta, role: result.user.role } });
+    if (result.roleChange) await audit(req, { action: "simple.role_synced", entityType: "User", entityId: result.user.id, metadata: { ...meta, ...result.roleChange } });
+    if (result.keptLastFounder) await audit(req, { action: "simple.kept_last_founder", entityType: "User", entityId: result.user.id, metadata: meta });
+    await audit(req, { action: "auth.simple_login", entityType: "User", entityId: result.user.id, metadata: { ...meta, storedName: result.user.name } });
+    ok(res, req.user);
+  })
+);
 
 const TICKET_INVALID: Record<string, string> = {
   wrong_app: "This sign-in link is for a different Focus Realm app. Open Mail Merge from the Workspace.",
@@ -138,6 +185,7 @@ authRouter.get(
 authRouter.post(
   "/login",
   asyncHandler(async (req, res) => {
+    refuseInSimpleMode();
     if (hubMode && !env.ALLOW_PASSWORD_LOGIN) throw AppError.forbidden("HUB_SIGN_IN", HUB_SIGN_IN);
     const { email, password } = LoginSchema.parse(req.body);
     const throttleKey = `${req.ip}|${email.toLowerCase()}`;
@@ -168,6 +216,9 @@ authRouter.post(
 authRouter.post(
   "/logout",
   asyncHandler(async (req, res) => {
+    if (simpleSignin && req.user) {
+      await audit(req, { action: "auth.logout", entityType: "User", entityId: req.user.id, metadata: signInMeta(req, req.user.name, req.user.employeeCode ?? null) });
+    }
     const token = readSessionToken(req);
     if (token) await revokeSession(token);
     clearSessionCookie(res);
@@ -201,6 +252,7 @@ authRouter.patch(
       },
     });
     req.user = toSessionUser(updated);
+    await audit(req, { action: "account.update_profile", entityType: "User", entityId: updated.id, metadata: { fields: Object.keys(input) } });
     ok(res, req.user);
   })
 );
@@ -209,6 +261,7 @@ authRouter.patch(
 authRouter.get(
   "/invite/:token",
   asyncHandler(async (req, res) => {
+    refuseInSimpleMode();
     refuseInHubMode();
     const row = await findAuthToken(req.params.token!, "INVITE");
     if (!row) throw AppError.notFound("INVITE_INVALID", "This invite link has expired or was already used. Ask a founder for a new one.");
@@ -219,6 +272,7 @@ authRouter.get(
 authRouter.post(
   "/accept-invite",
   asyncHandler(async (req, res) => {
+    refuseInSimpleMode();
     refuseInHubMode();
     const input = AcceptInviteSchema.parse(req.body);
     const row = await findAuthToken(input.token, "INVITE");
@@ -239,6 +293,7 @@ authRouter.post(
 authRouter.post(
   "/reset-password",
   asyncHandler(async (req, res) => {
+    refuseInSimpleMode();
     if (hubMode && !env.ALLOW_PASSWORD_LOGIN) throw AppError.forbidden("HUB_SIGN_IN", HUB_SIGN_IN);
     const input = ResetPasswordSchema.parse(req.body);
     const row = await findAuthToken(input.token, "PASSWORD_RESET");
@@ -257,6 +312,7 @@ authRouter.post(
   "/password",
   requireAuth,
   asyncHandler(async (req, res) => {
+    refuseInSimpleMode();
     if (!passwordAllowedFor(req.user!.role)) throw AppError.forbidden("HUB_SIGN_IN", "Your password is managed in the Focus Realm Workspace.");
     const input = ChangePasswordSchema.parse(req.body);
     const user = await prisma.user.findUniqueOrThrow({ where: { id: req.user!.id } });
@@ -296,6 +352,7 @@ usersRouter.post(
   "/invite",
   requirePermission("users.manage"),
   asyncHandler(async (req, res) => {
+    refuseInSimpleMode();
     if (hubMode) throw AppError.forbidden("HUB_MANAGED", "People join from the HR console: they appear here the first time they open Mail Merge from the Workspace.");
     const input = InviteUserSchema.parse(req.body);
     const result = await inviteUser(req, input);
@@ -312,6 +369,10 @@ usersRouter.patch(
     if (id === req.user!.id && (input.status === "DISABLED" || input.role === "EMPLOYEE")) {
       throw AppError.badRequest("SELF_CHANGE", "You can't disable yourself or remove your own founder role.");
     }
+    // Simple sign-in: roles come only from FOUNDER_EMPLOYEE_CODES (re-applied at every sign-in)
+    if (simpleSignin && input.role) {
+      throw AppError.forbidden("SIMPLE_SIGNIN_ROLES", "Roles come from FOUNDER_EMPLOYEE_CODES on the server. Disabling and re-enabling still work here.");
+    }
     ok(res, toSessionUser(await updateUser(req, id, input)));
   })
 );
@@ -320,6 +381,7 @@ usersRouter.post(
   "/:id/reset-link",
   requirePermission("users.manage"),
   asyncHandler(async (req, res) => {
+    refuseInSimpleMode();
     const id = IdSchema.parse(req.params.id);
     const { sendEmail } = z.object({ sendEmail: z.boolean().default(false) }).parse(req.body ?? {});
     if (hubMode) {

@@ -1,7 +1,7 @@
 // Overview, mailbox status, and activity
 import { Router } from "express";
 import prisma from "../db.js";
-import { env, imapConfigured, liveSendingBlocker, smtpConfigured } from "../config.js";
+import { env, imapConfigured, liveSendingBlocker, simpleSignin, smtpConfigured } from "../config.js";
 import { asyncHandler, AppError } from "../middleware/error-handler.js";
 import { requirePermission } from "../middleware/session.js";
 import { ok, okPage, skipTake } from "../lib/http.js";
@@ -10,7 +10,8 @@ import { campaignSummaryInclude, toCampaignSummaries } from "../lib/serialize.js
 import { sentInLast24h } from "../services/send-worker.js";
 import { verifyMailbox } from "../services/mailer.js";
 import { checkInbox, getImapState } from "../services/inbox-monitor.js";
-import { PaginationQuerySchema, type ActivityDto, type MailboxStatusDto, type OverviewDto } from "../../shared/types.js";
+import { audit } from "../lib/audit.js";
+import { IdSchema, PaginationQuerySchema, type ActivityDto, type MailboxStatusDto, type OverviewDto } from "../../shared/types.js";
 
 let cachedOverview: { data: OverviewDto; expiresAt: number } | null = null;
 const OVERVIEW_CACHE_TTL_MS = 15_000;
@@ -121,7 +122,8 @@ mailboxRouter.get(
 mailboxRouter.post(
   "/test-smtp",
   requirePermission("settings.view"),
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    await audit(req, { action: "mailbox.test_connection" });
     try {
       await verifyMailbox();
     } catch (err) {
@@ -135,8 +137,9 @@ mailboxRouter.post(
 mailboxRouter.post(
   "/check-inbox",
   requirePermission("settings.manage"),
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     if (!imapConfigured) throw AppError.badRequest("IMAP_NOT_CONFIGURED", "Inbox monitoring isn't configured on the server.");
+    await audit(req, { action: "mailbox.check_inbox" });
     try {
       ok(res, await checkInbox());
     } catch (err) {
@@ -156,14 +159,15 @@ mailboxRouter.post(
     }
     const { setLiveSending } = await import("../services/mailbox-config.js");
     const result = await setLiveSending(enabled);
+    await audit(req, { action: "settings.live_sending", metadata: { enabled } });
     ok(res, result);
   })
 );
 
-/** Updates sender email, password, and fromName; verifies connection before saving */
+/** Updates sender email, password, and fromName; verifies connection before saving. Founders only. */
 mailboxRouter.post(
   "/update-account",
-  requirePermission("settings.view"),
+  requirePermission("settings.manage"),
   asyncHandler(async (req, res) => {
     const { email, password, fromName } = req.body ?? {};
     if (!email) {
@@ -172,6 +176,8 @@ mailboxRouter.post(
     const { updateMailboxAccount } = await import("../services/mailbox-config.js");
     try {
       const result = await updateMailboxAccount({ email, password, fromName });
+      // Never the password
+      await audit(req, { action: "settings.mailbox_account", metadata: { email, fromName: fromName ?? null } });
       ok(res, result);
     } catch (err) {
       throw AppError.badRequest("MAILBOX_UPDATE_FAILED", (err as Error).message);
@@ -186,9 +192,18 @@ activityRouter.get(
   requirePermission("audit.view"),
   asyncHandler(async (req, res) => {
     const { page, pageSize } = PaginationQuerySchema.parse(req.query);
-    const where = { action: { notIn: ["auth.login", "auth.hub_login"] } };
+    // Founders can narrow Activity to one person
+    const userId = typeof req.query.userId === "string" && req.query.userId ? IdSchema.parse(req.query.userId) : undefined;
+    // Sign-ins are left out, except with simple sign-in, where they're the record of who used the app
+    const hidden = simpleSignin ? ["auth.login", "auth.hub_login"] : ["auth.login", "auth.hub_login", "auth.simple_login", "auth.logout"];
+    const where = { action: { notIn: hidden }, ...(userId ? { userId } : {}) };
     const [rows, total] = await Promise.all([
-      prisma.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, include: { user: { select: { id: true, name: true } } }, ...skipTake(page, pageSize) }),
+      prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        include: { user: { select: { id: true, name: true, employeeCode: true } } },
+        ...skipTake(page, pageSize),
+      }),
       prisma.auditLog.count({ where }),
     ]);
     const data: ActivityDto[] = rows.map((r) => ({
@@ -198,6 +213,8 @@ activityRouter.get(
       entityType: r.entityType,
       entityId: r.entityId,
       user: r.user,
+      ipAddress: r.ipAddress,
+      userAgent: r.userAgent,
       createdAt: r.createdAt.toISOString(),
     }));
     okPage(res, data, page, pageSize, total);

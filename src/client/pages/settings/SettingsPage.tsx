@@ -34,9 +34,7 @@ function MailboxTab() {
   const test = useMutation({ mutationFn: () => api.post("/api/mailbox/test-smtp") });
   const inbox = useMutation({ mutationFn: () => api.post<{ processed?: { bounces: number; replies: number } }>("/api/mailbox/check-inbox"), onSettled: () => invalidate("mailbox", "campaigns", "overview") });
 
-  if (mailbox.isPending) return <PageLoader />;
-  if (mailbox.isError) return <ErrorState error={mailbox.error} onRetry={() => mailbox.refetch()} />;
-  const m = mailbox.data.data;
+  // Every hook runs before the loading/error returns below (React needs the same hooks on every render)
   const [inlineEditing, setInlineEditing] = useState(false);
   const [editEmail, setEditEmail] = useState("");
   const [editPassword, setEditPassword] = useState("");
@@ -61,9 +59,10 @@ function MailboxTab() {
   });
 
   const startEditing = () => {
-    setEditEmail(m.smtp.fromEmail ?? "");
+    const smtp = mailbox.data!.data.smtp;
+    setEditEmail(smtp.fromEmail ?? "");
     setEditPassword("");
-    setEditFromName(m.smtp.fromName ?? "FocusRealm");
+    setEditFromName(smtp.fromName ?? "FocusRealm");
     setEditError(null);
     setInlineEditing(true);
   };
@@ -82,6 +81,10 @@ function MailboxTab() {
     onError: (err) => toast.error("Could not change live sending", errorMessage(err)),
   });
 
+  if (mailbox.isPending) return <PageLoader />;
+  if (mailbox.isError) return <ErrorState error={mailbox.error} onRetry={() => mailbox.refetch()} />;
+  const m = mailbox.data.data;
+
   return (
     <div className="space-y-6">
       <Panel
@@ -89,7 +92,8 @@ function MailboxTab() {
         description="The SpaceMail account every campaign and test is sent from."
         actions={
           <div className="flex items-center gap-2">
-            {!inlineEditing && (
+            {/* Replaces the sending mailbox's credentials: founders only (the API refuses anyone else) */}
+            {can("settings.manage") && !inlineEditing && (
               <Button size="sm" variant="secondary" onClick={startEditing}>
                 Edit Sender Name & Email
               </Button>
@@ -157,9 +161,11 @@ function MailboxTab() {
                 value: (
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-ink">{m.smtp.fromName} &lt;{m.smtp.fromEmail}&gt;</span>
-                    <Button size="sm" variant="ghost" className="text-primary hover:underline text-xs p-1 h-auto" onClick={startEditing}>
-                      Edit
-                    </Button>
+                    {can("settings.manage") && (
+                      <Button size="sm" variant="ghost" className="text-primary hover:underline text-xs p-1 h-auto" onClick={startEditing}>
+                        Edit
+                      </Button>
+                    )}
                   </div>
                 ),
               },
@@ -173,7 +179,7 @@ function MailboxTab() {
         )}
         {test.isSuccess && !inlineEditing && <p className="mt-4 flex items-center gap-2 text-[13px] text-success"><CheckCircle2 className="h-4 w-4" /> Signed in successfully. No email was sent.</p>}
         {test.isError && !inlineEditing && <Callout tone="danger" className="mt-4">{errorMessage(test.error)}</Callout>}
-        {!inlineEditing && (
+        {can("settings.manage") && !inlineEditing && (
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 text-xs text-ink-subtle">
             <p>
               You can change the sender display name and email address directly at any time.
@@ -303,8 +309,10 @@ function TeamTab() {
   const { user, can } = useAuth();
   const mode = useAuthMode();
   const hub = Boolean(mode.data?.hub);
+  // Simple sign-in: no passwords or invites, and roles come from FOUNDER_EMPLOYEE_CODES on the server
+  const simple = Boolean(mode.data?.simple);
   // Hub mode: passwords live in the Workspace; only founders keep one, for the break-glass sign-in
-  const canResetPassword = (m: TeamMemberDto) => !hub || (Boolean(mode.data?.passwordLogin) && m.role === "FOUNDER");
+  const canResetPassword = (m: TeamMemberDto) => !simple && (!hub || (Boolean(mode.data?.passwordLogin) && m.role === "FOUNDER"));
   const team = useTeam();
   const toast = useToast();
   const invalidate = useInvalidate();
@@ -335,7 +343,7 @@ function TeamTab() {
   const manage = can("users.manage");
   const confirmText = confirm && {
     disable: { title: `Disable ${confirm.member.name}?`, description: "They're signed out and can't sign in. Their history stays.", label: "Disable", body: { status: "DISABLED" } },
-    enable: { title: `Re-enable ${confirm.member.name}?`, description: hub ? "They can open Mail Merge from the Workspace again." : "They can sign in again with their password.", label: "Enable", body: { status: "ACTIVE" } },
+    enable: { title: `Re-enable ${confirm.member.name}?`, description: hub ? "They can open Mail Merge from the Workspace again." : simple ? "They can sign in again with their name and FR ID." : "They can sign in again with their password.", label: "Enable", body: { status: "ACTIVE" } },
     founder: { title: `Make ${confirm.member.name} a founder?`, description: "Founders can approve campaigns and manage the team and settings.", label: "Make founder", body: { role: "FOUNDER" } },
     employee: { title: `Change ${confirm.member.name} to employee?`, description: "They'll no longer be able to approve campaigns or manage the team.", label: "Change role", body: { role: "EMPLOYEE" } },
   }[confirm.action];
@@ -345,12 +353,14 @@ function TeamTab() {
       <Panel
         title="Team"
         description={
-          hub
+          simple
+            ? "People join by signing in with their name and FR ID. Founders are the FR IDs listed in FOUNDER_EMPLOYEE_CODES on the server; disable anyone who shouldn't be here."
+            : hub
             ? "People join from the Focus Realm HR console: they appear here the first time they open Mail Merge from the Workspace. Founders approve campaigns; employees prepare them."
             : "Founders approve campaigns; employees prepare them."
         }
         flush
-        actions={manage && !hub && <Button variant="primary" size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setInviting(true)}>Invite</Button>}
+        actions={manage && !hub && !simple && <Button variant="primary" size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setInviting(true)}>Invite</Button>}
       >
         {team.isPending ? (
           <PageLoader />
@@ -374,9 +384,9 @@ function TeamTab() {
                 {manage && m.id !== user?.id && (
                   <ActionMenu
                     items={[
-                      { label: "Make founder", onSelect: () => setConfirm({ member: m, action: "founder" }), hidden: m.role === "FOUNDER" || m.status === "DISABLED" },
-                      { label: "Change to employee", onSelect: () => setConfirm({ member: m, action: "employee" }), hidden: m.role === "EMPLOYEE" },
-                      { label: "Resend invite", onSelect: () => resendInvite.mutate(m), hidden: hub || m.status !== "INVITED" },
+                      { label: "Make founder", onSelect: () => setConfirm({ member: m, action: "founder" }), hidden: simple || m.role === "FOUNDER" || m.status === "DISABLED" },
+                      { label: "Change to employee", onSelect: () => setConfirm({ member: m, action: "employee" }), hidden: simple || m.role === "EMPLOYEE" },
+                      { label: "Resend invite", onSelect: () => resendInvite.mutate(m), hidden: hub || simple || m.status !== "INVITED" },
                       { label: "Send password reset link", onSelect: () => reset.mutate(m), hidden: m.status !== "ACTIVE" || !canResetPassword(m) },
                       { label: "Re-enable", onSelect: () => setConfirm({ member: m, action: "enable" }), hidden: m.status !== "DISABLED" },
                       { label: "Disable", tone: "danger", onSelect: () => setConfirm({ member: m, action: "disable" }), hidden: m.status !== "ACTIVE" },
@@ -434,17 +444,38 @@ function TeamTab() {
 
 function ActivityTab() {
   const [page, setPage] = useState(1);
-  const activity = useActivity(page);
+  const [person, setPerson] = useState("");
+  const mode = useAuthMode();
+  const team = useTeam();
+  const activity = useActivity(page, true, person);
   if (activity.isPending) return <PageLoader />;
   if (activity.isError) return <ErrorState error={activity.error} onRetry={() => activity.refetch()} />;
+  const people = (team.data?.data ?? []).map((m) => ({ value: m.id, label: m.employeeCode ? `${m.name} (${m.employeeCode})` : m.name }));
   return (
-    <Panel title="Activity" description="Who did what. Sign-ins are left out." flush>
+    <Panel
+      title="Activity"
+      description={mode.data?.simple ? "Who did what, including every sign-in and sign-out." : "Who did what. Sign-ins are left out."}
+      flush
+      actions={
+        <SelectField
+          aria-label="Filter by person"
+          className="h-8 min-w-[200px] text-xs"
+          value={person}
+          onChange={(e) => {
+            setPerson(e.target.value);
+            setPage(1);
+          }}
+          options={[{ value: "", label: "Everyone" }, ...people]}
+        />
+      }
+    >
       {activity.data.data.length ? (
         <ul className="divide-y divide-line">
           {activity.data.data.map((a) => (
             <li key={a.id} className="flex items-start justify-between gap-4 px-5 py-3 text-[13px]">
-              <p>
-                <span className="font-medium">{a.user?.name ?? "System"}</span> <span className="text-ink-muted">{a.summary}</span>
+              <p title={[a.ipAddress && `IP ${a.ipAddress}`, a.userAgent].filter(Boolean).join(" · ") || undefined}>
+                <span className="font-medium">{a.user?.name ?? "System"}</span>
+                {a.user?.employeeCode && <span className="text-ink-subtle"> ({a.user.employeeCode})</span>} <span className="text-ink-muted">{a.summary}</span>
               </p>
               <span className="shrink-0 whitespace-nowrap text-xs text-ink-subtle" title={formatDateTime(a.createdAt)}>{timeAgo(a.createdAt)}</span>
             </li>
@@ -462,8 +493,10 @@ function AccountTab() {
   const { user, refresh } = useAuth();
   const mode = useAuthMode();
   const hub = Boolean(mode.data?.hub);
-  // Hub mode: the password is the Workspace's; founders keep one here only for the break-glass sign-in
-  const ownPassword = !hub || (Boolean(mode.data?.passwordLogin) && user?.role === "FOUNDER");
+  const simple = Boolean(mode.data?.simple);
+  // Hub mode: the password is the Workspace's; founders keep one here only for the break-glass sign-in.
+  // Simple sign-in has no passwords.
+  const ownPassword = !simple && (!hub || (Boolean(mode.data?.passwordLogin) && user?.role === "FOUNDER"));
   const toast = useToast();
 
   const [senderName, setSenderName] = useState(user?.senderName ?? user?.name ?? "");
@@ -508,7 +541,9 @@ function AccountTab() {
         <DescriptionList
           items={[
             { label: "Name", value: user?.name },
-            ...(hub ? [{ label: "Employee ID", value: user?.employeeCode ?? "—" }, { label: "Email", value: user?.email ?? "—" }] : [{ label: "Login Email", value: user?.email }]),
+            ...(hub || simple
+              ? [{ label: simple ? "FR ID" : "Employee ID", value: user?.employeeCode ?? "—" }, { label: "Email", value: user?.email ?? "—" }]
+              : [{ label: "Login Email", value: user?.email }]),
             { label: "Role", value: user && ROLE_LABELS[user.role] },
           ]}
         />
@@ -557,6 +592,11 @@ function AccountTab() {
       {hub && !ownPassword && (
         <Panel title="Password">
           <p className="text-[13px] text-ink-muted">You sign in with your Focus Realm employee ID and password. Change your password in the Workspace.</p>
+        </Panel>
+      )}
+      {simple && (
+        <Panel title="Signing in">
+          <p className="text-[13px] text-ink-muted">You sign in with your full name and FR ID; there's no password. Sessions last 12 hours, and every sign-in and sign-out is recorded.</p>
         </Panel>
       )}
 
