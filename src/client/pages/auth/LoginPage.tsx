@@ -7,9 +7,9 @@ import { FocusRealmLoader } from "../../components/brand/FocusRealmLoader";
 import { Callout } from "../../components/ui/Feedback";
 import { useAuth } from "../../lib/auth";
 import { hubLinks, useAuthMode } from "../../lib/hub";
-import { errorMessage } from "../../lib/api";
+import { api, errorMessage } from "../../lib/api";
 import { useTitle } from "../../lib/hooks";
-import { LoginSchema } from "@shared/auth";
+import { LoginSchema, SimpleSignInSchema, type SessionUser } from "@shared/auth";
 
 function PasswordForm({ from }: { from: string }) {
   const { login } = useAuth();
@@ -60,6 +60,49 @@ function PasswordForm({ from }: { from: string }) {
   );
 }
 
+/** Simple sign-in (SIMPLE_SIGNIN): full name and FR ID, no password */
+function SimpleForm({ from }: { from: string }) {
+  const { adopt } = useAuth();
+  const navigate = useNavigate();
+  const [name, setName] = useState("");
+  const [employeeCode, setEmployeeCode] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; employeeCode?: string }>({});
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const parsed = SimpleSignInSchema.safeParse({ name, employeeCode });
+    if (!parsed.success) {
+      const f = parsed.error.flatten().fieldErrors;
+      setFieldErrors({ name: f.name?.[0], employeeCode: f.employeeCode?.[0] });
+      return;
+    }
+    setFieldErrors({});
+    setBusy(true);
+    try {
+      adopt((await api.post<SessionUser>("/api/auth/simple", parsed.data)).data);
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-5" noValidate>
+      <TextField label="Full name" autoComplete="name" autoFocus placeholder="Priya Menon" className="h-10" value={name} onChange={(e) => setName(e.target.value)} error={fieldErrors.name} />
+      <TextField label="FR ID" autoComplete="username" placeholder="FR-0042" className="h-10" value={employeeCode} onChange={(e) => setEmployeeCode(e.target.value)} error={fieldErrors.employeeCode} hint="Your Focus Realm employee ID." />
+      {error && <Callout tone="danger">{error}</Callout>}
+      <Button type="submit" variant="primary" className="h-10 w-full" loading={busy}>
+        Sign in
+      </Button>
+    </form>
+  );
+}
+
 export function LoginPage() {
   useTitle("Sign in");
   const { status } = useAuth();
@@ -69,6 +112,18 @@ export function LoginPage() {
 
   if (status === "authenticated") return <Navigate to={from} replace />;
   if (mode.isPending) return <FocusRealmLoader status="Checking how to sign in…" />;
+
+  if (mode.data?.simple) {
+    return (
+      <AuthLayout
+        title="Sign in"
+        description="Enter your full name and your FR ID."
+        footer="Every sign-in and action is recorded with your name and FR ID. Use your own."
+      >
+        <SimpleForm from={from} />
+      </AuthLayout>
+    );
+  }
 
   // Hub mode: people sign in to the Focus Realm Workspace, which opens Mail Merge for them
   if (mode.data?.hub && mode.data.hubUrl) {

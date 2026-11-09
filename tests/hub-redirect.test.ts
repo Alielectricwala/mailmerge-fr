@@ -43,4 +43,19 @@ describe("middleware.js", () => {
       delete process.env.FOCUS_REALM_HUB_URL;
     }
   });
+
+  it("never redirects while SIMPLE_SIGNIN is on, even with the hub configured", () => {
+    process.env.FOCUS_REALM_HUB_SECRET = "s".repeat(64);
+    process.env.FOCUS_REALM_HUB_URL = "https://hub.example";
+    process.env.SIMPLE_SIGNIN = "true";
+    try {
+      const res = middleware(new Request("https://fr-mailer.vercel.app/campaigns?x=1"));
+      expect(res.headers.get("x-middleware-next")).toBe("1");
+      expect(res.headers.get("location")).toBeNull();
+    } finally {
+      delete process.env.FOCUS_REALM_HUB_SECRET;
+      delete process.env.FOCUS_REALM_HUB_URL;
+      delete process.env.SIMPLE_SIGNIN;
+    }
+  });
 });

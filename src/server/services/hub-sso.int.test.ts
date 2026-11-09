@@ -177,7 +177,7 @@ describe("launch tickets", () => {
 describe("hub mode", () => {
   it("reports how to sign in", async () => {
     const res = await call("/api/auth/mode");
-    expect(((await res.json()) as { data: unknown }).data).toEqual({ hub: true, hubUrl: HUB, passwordLogin: false });
+    expect(((await res.json()) as { data: unknown }).data).toEqual({ hub: true, hubUrl: HUB, passwordLogin: false, simple: false });
   });
 
   it("sends requests that skip the hub to the same address on the hub", async () => {

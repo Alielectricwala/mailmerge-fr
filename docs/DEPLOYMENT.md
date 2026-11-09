@@ -58,6 +58,8 @@ Use a **separate database for Preview deployments**. Preview builds never run mi
 | `FOCUS_REALM_HUB_SECRET`, `FOCUS_REALM_HUB_URL` | Optional: sign in through the Focus Realm Workspace (section 6). Leave unset until then |
 | `VITE_BASE_PATH` | Optional, build-time: `/mail/` when served on the Workspace (section 6) |
 | `ALLOW_PASSWORD_LOGIN` | Hub mode only: `true` lets founders use the email/password form when the Workspace is down |
+| `SIMPLE_SIGNIN` | Optional: `true` replaces sign-in with name + FR ID, self-declared and not verified ([AUTH.md](AUTH.md#simple-sign-in-simple_signin)). Overrides the hub settings |
+| `FOUNDER_EMPLOYEE_CODES` | Simple sign-in only: FR IDs that are founders, comma-separated, e.g. `FR-0001,FR-0002` |
 
 Vercel sets `NODE_ENV=production` itself. That makes session cookies `Secure`, which is correct because Vercel serves HTTPS.
 

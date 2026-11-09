@@ -55,4 +55,6 @@ export interface AuthModeDto {
   hubUrl: string | null;
   /** The email/password form is available (always outside hub mode; founders only with ALLOW_PASSWORD_LOGIN in hub mode) */
   passwordLogin: boolean;
+  /** Simple sign-in (SIMPLE_SIGNIN): people sign in with their name and FR ID; no passwords, invites or hub */
+  simple: boolean;
 }

@@ -137,6 +137,20 @@ export const SessionUserSchema = z.object({
 });
 export type SessionUser = z.infer<typeof SessionUserSchema>;
 
+/** A Focus Realm employee ID: "FR-" and digits. Typed in any case, with spaces around it; stored upper case. */
+export const FrIdSchema = z
+  .string({ required_error: "Enter your FR ID" })
+  .trim()
+  .transform((v) => v.toUpperCase())
+  .pipe(z.string().regex(/^FR-\d{1,8}$/, "Enter your FR ID like FR-0042"));
+
+/** Simple sign-in (SIMPLE_SIGNIN): self-declared name and FR ID, no password */
+export const SimpleSignInSchema = z.object({
+  name: z.string({ required_error: "Enter your full name" }).trim().min(1, "Enter your full name").max(100, "Use at most 100 characters"),
+  employeeCode: FrIdSchema,
+});
+export type SimpleSignInInput = z.input<typeof SimpleSignInSchema>;
+
 export const LoginSchema = z.object({
   email: EmailSchema,
   password: z.string().min(1, "Password is required"),
@@ -187,6 +201,8 @@ export const PASSWORD_MIN_LENGTH = 12;
 export const SESSION_TTL_DAYS = 14;
 /** Sessions started from the Workspace are short, so someone offboarded there loses access within a day */
 export const HUB_SESSION_TTL_HOURS = 12;
+/** Simple sign-in (SIMPLE_SIGNIN): sessions are short because identities are self-declared */
+export const SIMPLE_SESSION_TTL_HOURS = 12;
 export const SESSION_COOKIE_NAME = "fr_session";
 /**
  * Hub mode: the Workspace already uses fr_session on the shared address, so this app's cookie gets

@@ -51,9 +51,25 @@ Hub mode is on when both `FOCUS_REALM_HUB_SECRET` and `FOCUS_REALM_HUB_URL` are 
 
 **Existing accounts:** an account made before hub mode has no employee ID, so a person's first Workspace sign-in would create a second, empty account. Before turning hub mode on, link each existing member: `npm run user:link -- --email you@focusrealm.com --employee-code FR-0001`. If the duplicate already exists, add `--force` to move the ID to the original account, then disable the duplicate in Settings → Team.
 
+## Simple sign-in (SIMPLE_SIGNIN)
+
+**Identities are not verified.** Anyone who can reach the app can sign in as any FR ID by typing it. Use this only where that's acceptable, and turn it off when it isn't (see below). The server logs a warning at startup while it's on: "Sign-in is self-declared (name + FR ID); identities are not verified."
+
+With `SIMPLE_SIGNIN=true`, the sign-in page asks for two things: **full name** and **FR ID** (`FR-` followed by digits, e.g. `FR-0042`; typed in any case, spaces around it are ignored, stored upper case). There's no password, email, invite, reset or Workspace sign-in.
+
+- **Accounts:** found by FR ID. A new FR ID creates an account (active, employee, the name typed, no email). An existing account keeps its stored name; the name typed is recorded in Activity. Disabled accounts are refused: "Your Mail Merge access was switched off. Ask a founder."
+- **Roles:** everyone is an employee except the FR IDs in `FOUNDER_EMPLOYEE_CODES` (comma-separated), which are founders. That's re-applied at every sign-in, so role changes from Settings → Team are refused; disabling and re-enabling still work there. The last active founder is never demoted (recorded in Activity instead). With the list empty, nobody is a founder: settings, team management and approvals are out of reach, and the server warns at startup.
+- **Sessions:** 12 hours, in the usual `fr_session` cookie (`HttpOnly`, `SameSite=Lax`, `Secure` in production, path `/`). Sign out is a button at the bottom of the sidebar.
+- **Rate limit:** 30 sign-in attempts per IP per 15 minutes (`429` with `Retry-After` after that). The count is kept in memory, so on Vercel it's per function instance.
+- **Record:** every sign-in and sign-out is in Activity with the name typed, FR ID, time, IP and user agent. Everything people do (campaigns, templates, contacts, lists, research, settings) is recorded against their account. Founders see it in Settings → Activity, with each person's name and FR ID, and can filter by person; hover an entry for its IP and browser.
+- **Hub mode is off** while this is on, even if `FOCUS_REALM_HUB_SECRET`/`FOCUS_REALM_HUB_URL` are set: no redirect to the Workspace (`middleware.js` and Express), and the client is built for `/` whatever `VITE_BASE_PATH` says. The app answers at its own address.
+- **Unchanged:** `/api/internal/*` still needs `CRON_SECRET`; unsubscribe links (`/u/…`) and `/health` work as before; `ALLOW_LIVE_SENDING` and `DAILY_SEND_LIMIT` apply as before. Turning simple sign-in on doesn't turn sending on.
+
+**Turning it off:** unset `SIMPLE_SIGNIN` (or set it to `false`) and redeploy. Sign-in goes back to email and password (or the Workspace, if the hub variables are set). Accounts created by simple sign-in have no email or password, so they can't sign in that way; disable them in Settings → Team, or invite people by email. Their activity stays.
+
 ## Getting people in
 
-In hub mode, people get in through the Workspace (above). Otherwise:
+In hub mode, people get in through the Workspace, and with simple sign-in by typing their name and FR ID (both above). Otherwise:
 
 - **First founder:** `npm run user:create -- --email … --name "…" --role FOUNDER` prints an invite link.
 - **Everyone else:** a founder uses Settings → Team → Invite. The link is shown for copying and, optionally, emailed from the mailbox.

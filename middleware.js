@@ -1,9 +1,10 @@
 // Vercel Routing Middleware: runs before static files and the API function, so it covers the client
 // pages too. In hub mode (FOCUS_REALM_HUB_SECRET and FOCUS_REALM_HUB_URL set), anything that
 // reaches this app's own address without the hub header is sent to the same page on the hub.
+// SIMPLE_SIGNIN=true turns this off, as it turns hub mode off on the server (src/server/config.ts).
 //
 // Plain JavaScript and self-contained, like api/index.js. The rules mirror hubRedirectTarget in
-// src/shared/hub.ts (Express applies that one to the API); src/shared/hub.test.ts checks both agree.
+// src/shared/hub.ts (Express applies that one to the API); tests/hub-redirect.test.ts checks both agree.
 import { next } from "@vercel/functions/middleware";
 
 const HUB_HEADER = "x-focusrealm-hub";
@@ -27,6 +28,8 @@ export function hubRedirectTarget({ pathname, search, headerValue, secret, hubUr
 }
 
 export default function middleware(request) {
+  // Simple sign-in keeps the app at its own address: no hub redirect
+  if (process.env.SIMPLE_SIGNIN?.trim() === "true") return next();
   const url = new URL(request.url);
   const target = hubRedirectTarget({
     pathname: url.pathname,

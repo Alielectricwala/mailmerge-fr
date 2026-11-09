@@ -37,6 +37,7 @@ router.patch(
     const id = IdSchema.parse(req.params.id);
     const input = ContactListInputSchema.partial().parse(req.body);
     const list = await prisma.contactList.update({ where: { id }, data: input, include: withCount });
+    await audit(req, { action: "list.update", entityType: "ContactList", entityId: id, metadata: { name: list.name } });
     ok(res, toListDto(list));
   })
 );

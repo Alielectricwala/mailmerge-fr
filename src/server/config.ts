@@ -72,6 +72,12 @@ const EnvSchema = z.object({
   // Where the client is served from, e.g. /mail/ on the hub. Read here for cookie paths and redirects.
   VITE_BASE_PATH: optionalString,
 
+  // Simple sign-in: people type their full name and FR ID; no password, email, invites or hub. Identities
+  // are NOT verified (see docs/AUTH.md). Overrides hub mode while on.
+  SIMPLE_SIGNIN: envBoolean.default("false"),
+  // Simple sign-in only: FR IDs that get the founder role, comma-separated, e.g. "FR-0001,FR-0002"
+  FOUNDER_EMPLOYEE_CODES: optionalString,
+
   // Optional: Google Gemini drafts templates from a brief. Only the brief, an optional example email and
   // merge-field names are sent — never contact data. Get a key at https://aistudio.google.com/apikey
   GEMINI_API_KEY: optionalString,
@@ -102,11 +108,29 @@ export const smtpConfigured =Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_
 export const imapConfigured = Boolean(env.IMAP_HOST && env.IMAP_USER && env.IMAP_PASS);
 export const aiConfigured = Boolean(env.GEMINI_API_KEY);
 
-/** Signed in through the Workspace: FOCUS_REALM_HUB_SECRET and FOCUS_REALM_HUB_URL are both set */
-export const hubMode = Boolean(env.FOCUS_REALM_HUB_SECRET && env.FOCUS_REALM_HUB_URL);
+/** Simple sign-in: name + FR ID, self-declared. Turns hub mode off so the app stays at its own address. */
+export const simpleSignin = env.SIMPLE_SIGNIN;
 
-/** "/" or e.g. "/mail/" — the client's base path (VITE_BASE_PATH) */
-export const basePath = normalizeBasePath(env.VITE_BASE_PATH);
+/** Simple sign-in: the FR IDs that are founders (upper case) */
+export const founderEmployeeCodes: ReadonlySet<string> = new Set(
+  (env.FOUNDER_EMPLOYEE_CODES ?? "")
+    .split(",")
+    .map((c) => c.trim().toUpperCase())
+    .filter(Boolean)
+);
+
+/** Signed in through the Workspace: FOCUS_REALM_HUB_SECRET and FOCUS_REALM_HUB_URL are both set (and not simple sign-in) */
+export const hubMode = !simpleSignin && Boolean(env.FOCUS_REALM_HUB_SECRET && env.FOCUS_REALM_HUB_URL);
+
+/** "/" or e.g. "/mail/" — the client's base path (VITE_BASE_PATH; always "/" with simple sign-in) */
+export const basePath = simpleSignin ? "/" : normalizeBasePath(env.VITE_BASE_PATH);
+
+if (simpleSignin) {
+  console.warn("[auth] SIMPLE_SIGNIN is on. Sign-in is self-declared (name + FR ID); identities are not verified.");
+  if (founderEmployeeCodes.size === 0) {
+    console.warn("[auth] FOUNDER_EMPLOYEE_CODES is empty: nobody signing in gets the founder role, so settings, team and approvals are out of reach.");
+  }
+}
 
 /**
  * This app's own address, for calls it makes to itself (the burst chain). In hub mode PUBLIC_URL is
